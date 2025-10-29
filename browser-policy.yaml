@@ -1,0 +1,39 @@
+# Example Browser Policy Configuration
+# This file demonstrates how to configure browser policies
+# that can apply to multiple browsers
+
+policies:
+  # Privacy controls that apply across browsers
+  - name: Private browsing restrictions
+    browsers:
+      - chrome
+      - firefox
+      - edge
+    disable_private_mode: true  # Disables incognito/private browsing/InPrivate
+    disable_guest_mode: true    # Disables guest mode (Chrome and Edge only)
+
+  # Extension policy with browser-specific IDs and settings
+  - name: uBlock Origin Lite
+    browsers:
+      - chrome
+      - firefox
+      - edge
+    extensions:
+      - name: uBlock Origin Lite
+        id:
+          firefox: uBOLite@raymondhill.net
+          chrome: ddkjiahejlhfcafbddmgiahcphecmpfh
+          edge: ddkjiahejlhfcafbddmgiahcphecmpfh
+        force_installed: true
+        # Extension-specific settings (arbitrary JSON structure)
+        # These settings are extension-specific and will be passed through
+        # See https://github.com/uBlockOrigin/uBOL-home/wiki/Managed-settings
+        settings:
+          rulesets:
+            - "+default"
+            - "+isr-0"
+          strictBlockMode: true
+          defaultFiltering: optimal
+          disableFirstRunPage: true
+          disabledFeatures:
+            - filteringMode
