@@ -3,6 +3,9 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
+#[cfg(windows)]
+use std::fs::OpenOptions;
+
 /// Atomically write content to a file
 ///
 /// This function writes to a temporary file in the same directory,
@@ -48,6 +51,39 @@ pub fn ensure_directory_exists(path: &Path) -> Result<()> {
     }
 
     set_permissions_readable_all(path)?;
+
+    Ok(())
+}
+
+/// Set file permissions to a specific mode (Unix only, no-op on Windows)
+pub fn set_file_permissions(path: &Path, mode: u32) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let metadata = std::fs::metadata(path)
+            .with_context(|| format!("Failed to get metadata for: {}", path.display()))?;
+
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(mode);
+
+        std::fs::set_permissions(path, permissions)
+            .with_context(|| format!("Failed to set permissions for: {}", path.display()))?;
+    }
+
+    #[cfg(windows)]
+    {
+        // On Windows, just ensure it's not read-only
+        // More complex ACL manipulation would require additional dependencies
+        let metadata = std::fs::metadata(path)
+            .with_context(|| format!("Failed to get metadata for: {}", path.display()))?;
+
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(false);
+
+        std::fs::set_permissions(path, permissions)
+            .with_context(|| format!("Failed to set permissions for: {}", path.display()))?;
+    }
 
     Ok(())
 }

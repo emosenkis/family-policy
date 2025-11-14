@@ -94,7 +94,11 @@ pub struct Extension {
     pub update_url: Option<String>,
     /// For Firefox - install URL (required for Firefox)
     pub install_url: Option<String>,
-    /// Extension-specific settings
+    /// Extension-specific settings (e.g., for uBO Lite configuration)
+    ///
+    /// NOTE: This field is populated from config but not yet used by policy implementations.
+    /// It's reserved for future functionality to pass extension-specific configuration.
+    #[allow(dead_code)] // Reserved for future extension configuration support
     pub settings: HashMap<String, serde_json::Value>,
 }
 

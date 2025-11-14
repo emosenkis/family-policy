@@ -36,8 +36,10 @@ pub fn write_json_policy(
 
 /// Read a JSON policy file
 ///
-/// Returns None if the file doesn't exist
+/// Returns None if the file doesn't exist.
+/// This function is part of the platform API but currently unused in the main code.
 #[cfg(target_os = "linux")]
+#[allow(dead_code)] // Part of platform API, used in tests
 pub fn read_json_policy(
     policy_dir: &Path,
     policy_name: &str,
@@ -91,7 +93,11 @@ pub fn get_chrome_policy_dir() -> &'static Path {
 }
 
 /// Get Chromium policy directory path
+///
+/// Note: This is for the Chromium browser (open-source), not Chrome.
+/// Currently unused as the tool focuses on Chrome, Firefox, and Edge.
 #[cfg(target_os = "linux")]
+#[allow(dead_code)] // For Chromium browser support (not yet implemented)
 pub fn get_chromium_policy_dir() -> &'static Path {
     Path::new("/etc/chromium/policies/managed")
 }
@@ -103,7 +109,10 @@ pub fn get_edge_policy_dir() -> &'static Path {
 }
 
 /// Get Firefox policy directory path
+///
+/// Returns the directory path. Firefox policy module uses full path to policies.json instead.
 #[cfg(target_os = "linux")]
+#[allow(dead_code)] // Firefox module uses full path, this is for API completeness
 pub fn get_firefox_policy_dir() -> &'static Path {
     Path::new("/etc/firefox/policies")
 }

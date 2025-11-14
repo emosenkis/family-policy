@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 /// Supported browsers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
@@ -11,15 +10,6 @@ pub enum Browser {
 }
 
 impl Browser {
-    /// Get human-readable name
-    pub fn name(&self) -> &'static str {
-        match self {
-            Browser::Chrome => "Chrome",
-            Browser::Firefox => "Firefox",
-            Browser::Edge => "Edge",
-        }
-    }
-
     /// Get lowercase string representation
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -31,7 +21,11 @@ impl Browser {
 }
 
 /// Supported platforms
+///
+/// Note: On each platform, only the current platform variant is constructed,
+/// but all variants are needed for match expressions in policy modules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Not all variants constructed on every platform
 pub enum Platform {
     Windows,
     MacOS,
@@ -72,6 +66,11 @@ pub fn current_platform() -> Platform {
     }
 }
 
+#[cfg(test)]
+mod test_helpers {
+    use super::*;
+    use std::path::PathBuf;
+
 /// Check if a browser is available on the system
 pub fn is_browser_available(browser: Browser) -> bool {
     match browser {
@@ -97,7 +96,7 @@ fn is_edge_available() -> bool {
 }
 
 /// Get possible Chrome installation paths
-fn get_chrome_paths() -> Vec<PathBuf> {
+pub fn get_chrome_paths() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         vec![
@@ -130,7 +129,7 @@ fn get_chrome_paths() -> Vec<PathBuf> {
 }
 
 /// Get possible Firefox installation paths
-fn get_firefox_paths() -> Vec<PathBuf> {
+pub fn get_firefox_paths() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         vec![
@@ -161,7 +160,7 @@ fn get_firefox_paths() -> Vec<PathBuf> {
 }
 
 /// Get possible Edge installation paths
-fn get_edge_paths() -> Vec<PathBuf> {
+pub fn get_edge_paths() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         vec![
@@ -190,18 +189,12 @@ fn get_edge_paths() -> Vec<PathBuf> {
         vec![]
     }
 }
+} // end of test_helpers module
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // Browser tests
-    #[test]
-    fn test_browser_name() {
-        assert_eq!(Browser::Chrome.name(), "Chrome");
-        assert_eq!(Browser::Firefox.name(), "Firefox");
-        assert_eq!(Browser::Edge.name(), "Edge");
-    }
+    use super::test_helpers::*;
 
     #[test]
     fn test_browser_clone() {
