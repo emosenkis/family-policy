@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::state::{AppliedPolicies, State};
 
+mod chromium_common;
 pub mod chrome;
 pub mod edge;
 pub mod firefox;
