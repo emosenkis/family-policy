@@ -1,0 +1,18 @@
+Package: family-policy
+Version: 0.1.0
+Section: admin
+Priority: optional
+Architecture: amd64
+Depends: systemd
+Maintainer: Family Policy Team <noreply@example.com>
+Description: Browser Extension Policy Manager
+ Manages browser extension force-install policies and privacy controls
+ for Chrome, Firefox, and Edge across Linux systems. Supports both
+ local mode and remote GitHub-based policy management.
+ .
+ Features:
+  - Force-install browser extensions
+  - Disable private/incognito browsing modes
+  - Remote policy management via GitHub polling
+  - Support for Chrome, Firefox, and Edge browsers
+Homepage: https://github.com/username/family-policy

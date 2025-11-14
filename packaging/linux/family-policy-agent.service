@@ -1,0 +1,27 @@
+[Unit]
+Description=Family Policy Agent - Browser Extension Policy Management
+Documentation=https://github.com/username/family-policy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/family-policy agent start --no-daemon
+Restart=on-failure
+RestartSec=10s
+User=root
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/browser-extension-policy /etc/family-policy
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=family-policy-agent
+
+[Install]
+WantedBy=multi-user.target

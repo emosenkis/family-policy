@@ -1,0 +1,245 @@
+name: Release Builds
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    name: Build Linux (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Install packaging dependencies
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev rpm
+
+      - name: Build DEB package
+        run: |
+          chmod +x packaging/debian/build-deb.sh
+          cd packaging/debian
+          ./build-deb.sh
+
+      - name: Build RPM package
+        run: |
+          chmod +x packaging/rpm/build-rpm.sh
+          cd packaging/rpm
+          ./build-rpm.sh
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-policy-linux-x86_64
+          path: target/x86_64-unknown-linux-gnu/release/family-policy
+
+      - name: Upload DEB package
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-policy-deb
+          path: dist/*.deb
+
+      - name: Upload RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-policy-rpm
+          path: dist/*.rpm
+
+  build-macos:
+    name: Build macOS (Universal)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build for Intel
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: Build for Apple Silicon
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          mkdir -p target/universal-apple-darwin/release
+          lipo -create \
+            target/x86_64-apple-darwin/release/family-policy \
+            target/aarch64-apple-darwin/release/family-policy \
+            -output target/universal-apple-darwin/release/family-policy
+          chmod +x target/universal-apple-darwin/release/family-policy
+
+      - name: Build PKG installer
+        run: |
+          chmod +x packaging/macos/build-pkg.sh
+          # Modify build script to use universal binary
+          sed -i '' 's|target/release/family-policy|target/universal-apple-darwin/release/family-policy|' packaging/macos/build-pkg.sh
+          cd packaging/macos
+          ./build-pkg.sh
+
+      - name: Upload macOS binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-policy-macos-universal
+          path: target/universal-apple-darwin/release/family-policy
+
+      - name: Upload PKG installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-policy-pkg
+          path: dist/*.pkg
+
+  build-windows:
+    name: Build Windows (x86_64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-policy-windows-x86_64
+          path: target/x86_64-pc-windows-msvc/release/family-policy.exe
+
+      - name: Create ZIP archive
+        run: |
+          mkdir -p dist
+          Copy-Item target/x86_64-pc-windows-msvc/release/family-policy.exe dist/
+          Copy-Item packaging/windows/install.ps1 dist/
+          Copy-Item packaging/windows/uninstall.ps1 dist/
+          Compress-Archive -Path dist/* -DestinationPath family-policy-windows-x86_64.zip
+
+      - name: Upload ZIP archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-policy-windows-zip
+          path: family-policy-windows-x86_64.zip
+
+  create-release:
+    name: Create Release Assets
+    needs: [build-linux, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+
+          # Linux binary
+          cp artifacts/family-policy-linux-x86_64/family-policy release-assets/family-policy-linux-x86_64
+          chmod +x release-assets/family-policy-linux-x86_64
+
+          # macOS binary
+          cp artifacts/family-policy-macos-universal/family-policy release-assets/family-policy-macos-universal
+          chmod +x release-assets/family-policy-macos-universal
+
+          # Windows binary
+          cp artifacts/family-policy-windows-x86_64/family-policy.exe release-assets/family-policy-windows-x86_64.exe
+
+          # Packages
+          cp artifacts/family-policy-deb/*.deb release-assets/ || true
+          cp artifacts/family-policy-rpm/*.rpm release-assets/ || true
+          cp artifacts/family-policy-pkg/*.pkg release-assets/ || true
+          cp artifacts/family-policy-windows-zip/*.zip release-assets/ || true
+
+          # Create checksums
+          cd release-assets
+          sha256sum * > SHA256SUMS
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

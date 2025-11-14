@@ -62,12 +62,18 @@ enum AgentCommands {
         #[arg(long, default_value = "300")]
         poll_interval: u64,
     },
+    /// Install agent as a system service
+    Install,
+    /// Uninstall agent system service
+    Uninstall,
     /// Start agent daemon
     Start {
         /// Run in foreground (don't daemonize)
         #[arg(long)]
         no_daemon: bool,
     },
+    /// Stop agent daemon
+    Stop,
     /// Check for policy updates now (don't wait for next poll)
     CheckNow,
     /// Show agent status
@@ -106,8 +112,17 @@ fn run_agent_command(command: AgentCommands, verbose: bool) -> Result<()> {
         AgentCommands::Setup { url, token, poll_interval } => {
             agent_setup(url, token, poll_interval)
         }
+        AgentCommands::Install => {
+            agent_install()
+        }
+        AgentCommands::Uninstall => {
+            agent_uninstall_service()
+        }
         AgentCommands::Start { no_daemon } => {
             agent_start(no_daemon)
+        }
+        AgentCommands::Stop => {
+            agent_stop()
         }
         AgentCommands::CheckNow => {
             agent_check_now()
@@ -213,6 +228,146 @@ fn agent_setup(url: String, token: Option<String>, poll_interval: u64) -> Result
     Ok(())
 }
 
+/// Install agent as a system service
+fn agent_install() -> Result<()> {
+    // Check for admin privileges
+    if let Err(e) = platform::ensure_admin_privileges() {
+        eprintln!("Insufficient privileges: {:#}", e);
+        print_sudo_message();
+        std::process::exit(1);
+    }
+
+    println!("Installing Family Policy Agent as a system service");
+    println!();
+
+    #[cfg(target_os = "linux")]
+    {
+        // For Linux, use systemctl
+        println!("Enabling systemd service...");
+
+        let output = std::process::Command::new("systemctl")
+            .arg("enable")
+            .arg("family-policy-agent")
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to enable service: {}", error);
+        }
+
+        println!("✓ Service enabled");
+        println!();
+        println!("Service installed successfully!");
+        println!();
+        println!("To start the service:");
+        println!("  sudo systemctl start family-policy-agent");
+        println!();
+        println!("To check status:");
+        println!("  sudo systemctl status family-policy-agent");
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // For macOS, use launchctl
+        println!("Loading LaunchDaemon...");
+
+        let plist_path = "/Library/LaunchDaemons/com.family-policy.agent.plist";
+        let output = std::process::Command::new("launchctl")
+            .arg("load")
+            .arg(plist_path)
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to load LaunchDaemon: {}", error);
+        }
+
+        println!("✓ LaunchDaemon loaded");
+        println!();
+        println!("Service installed and started successfully!");
+        println!();
+        println!("To check status:");
+        println!("  sudo launchctl list | grep family-policy");
+        println!("  sudo family-policy agent status");
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("Windows Service installation is not yet implemented.");
+        println!();
+        println!("You can run the agent manually:");
+        println!("  family-policy agent start --no-daemon");
+        println!();
+        println!("Or use Task Scheduler to run it at startup.");
+    }
+
+    Ok(())
+}
+
+/// Uninstall agent system service
+fn agent_uninstall_service() -> Result<()> {
+    // Check for admin privileges
+    if let Err(e) = platform::ensure_admin_privileges() {
+        eprintln!("Insufficient privileges: {:#}", e);
+        print_sudo_message();
+        std::process::exit(1);
+    }
+
+    println!("Uninstalling Family Policy Agent service");
+    println!();
+
+    #[cfg(target_os = "linux")]
+    {
+        // Stop service first
+        let _ = std::process::Command::new("systemctl")
+            .arg("stop")
+            .arg("family-policy-agent")
+            .output();
+
+        // Disable service
+        println!("Disabling systemd service...");
+        let output = std::process::Command::new("systemctl")
+            .arg("disable")
+            .arg("family-policy-agent")
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            println!("Warning: Failed to disable service: {}", error);
+        } else {
+            println!("✓ Service disabled");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Unload LaunchDaemon
+        println!("Unloading LaunchDaemon...");
+        let plist_path = "/Library/LaunchDaemons/com.family-policy.agent.plist";
+        let output = std::process::Command::new("launchctl")
+            .arg("unload")
+            .arg(plist_path)
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            println!("Warning: Failed to unload LaunchDaemon: {}", error);
+        } else {
+            println!("✓ LaunchDaemon unloaded");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("Windows Service is not installed.");
+    }
+
+    println!();
+    println!("Service uninstalled successfully!");
+
+    Ok(())
+}
+
 /// Start agent daemon
 fn agent_start(no_daemon: bool) -> Result<()> {
     // Check for admin privileges
@@ -238,9 +393,104 @@ fn agent_start(no_daemon: bool) -> Result<()> {
             agent::run_agent_daemon(config).await
         })
     } else {
-        // TODO: Implement proper daemonization for each platform
-        anyhow::bail!("Daemon mode not yet implemented. Use --no-daemon to run in foreground.");
+        // Use system service instead of manual daemonization
+        #[cfg(target_os = "linux")]
+        {
+            println!("Starting systemd service...");
+            let output = std::process::Command::new("systemctl")
+                .arg("start")
+                .arg("family-policy-agent")
+                .output()?;
+
+            if !output.status.success() {
+                let error = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!("Failed to start service: {}\n\nHint: Have you run 'sudo family-policy agent install'?", error);
+            }
+
+            println!("✓ Service started successfully");
+            println!();
+            println!("To check status:");
+            println!("  sudo systemctl status family-policy-agent");
+            println!("  sudo family-policy agent status");
+
+            Ok(())
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS, the LaunchDaemon should auto-start when loaded
+            println!("The agent runs as a LaunchDaemon on macOS.");
+            println!();
+            println!("If the daemon is not running, load it with:");
+            println!("  sudo launchctl load /Library/LaunchDaemons/com.family-policy.agent.plist");
+            println!();
+            println!("To check status:");
+            println!("  sudo launchctl list | grep family-policy");
+            println!("  sudo family-policy agent status");
+
+            Ok(())
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            anyhow::bail!("Daemon mode not yet implemented on Windows. Use --no-daemon to run in foreground.");
+        }
     }
+}
+
+/// Stop agent daemon
+fn agent_stop() -> Result<()> {
+    // Check for admin privileges
+    if let Err(e) = platform::ensure_admin_privileges() {
+        eprintln!("Insufficient privileges: {:#}", e);
+        print_sudo_message();
+        std::process::exit(1);
+    }
+
+    println!("Stopping Family Policy Agent");
+    println!();
+
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("systemctl")
+            .arg("stop")
+            .arg("family-policy-agent")
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to stop service: {}", error);
+        }
+
+        println!("✓ Service stopped successfully");
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let plist_path = "/Library/LaunchDaemons/com.family-policy.agent.plist";
+        let output = std::process::Command::new("launchctl")
+            .arg("unload")
+            .arg(plist_path)
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to stop LaunchDaemon: {}", error);
+        }
+
+        println!("✓ LaunchDaemon stopped successfully");
+        println!();
+        println!("To start it again:");
+        println!("  sudo launchctl load {}", plist_path);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("No Windows Service is running.");
+        println!("If you started the agent manually, press Ctrl+C to stop it.");
+    }
+
+    Ok(())
 }
 
 /// Check for policy updates now
