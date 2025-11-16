@@ -101,10 +101,8 @@ jobs:
       - name: Build PKG installer
         run: |
           chmod +x packaging/macos/build-pkg.sh
-          # Modify build script to use universal binary
-          sed -i '' 's|target/release/family-policy|target/universal-apple-darwin/release/family-policy|' packaging/macos/build-pkg.sh
-          cd packaging/macos
-          ./build-pkg.sh
+          # Pass the universal binary path to the build script
+          packaging/macos/build-pkg.sh target/universal-apple-darwin/release/family-policy
 
       - name: Upload macOS binary
         uses: actions/upload-artifact@v4
@@ -174,7 +172,7 @@ jobs:
         run: cargo install cargo-wix
 
       - name: Build MSI package
-        run: cargo wix --nocapture --target x86_64-pc-windows-msvc
+        run: cargo wix --no-build --nocapture --target x86_64-pc-windows-msvc
 
       - name: Upload MSI package
         uses: actions/upload-artifact@v4

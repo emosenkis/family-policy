@@ -5,7 +5,11 @@ set -e
 VERSION="0.1.0"
 IDENTIFIER="com.family-policy.pkg"
 
+# Accept binary path as first argument, default to target/release/family-policy
+BINARY_PATH="${1:-target/release/family-policy}"
+
 echo "Building macOS PKG installer: family-policy-${VERSION}.pkg"
+echo "Using binary: $BINARY_PATH"
 echo
 
 # Check if running on macOS
@@ -14,9 +18,12 @@ if [ "$(uname)" != "Darwin" ]; then
     exit 1
 fi
 
-# Binary should already be built by CI or manually
-# If running locally, ensure you've run: cargo build --release
-# If running in CI, the universal binary is already built
+# Check if binary exists
+if [ ! -f "$BINARY_PATH" ]; then
+    echo "Error: Binary not found at $BINARY_PATH"
+    echo "Please build the binary first or provide the correct path as the first argument"
+    exit 1
+fi
 
 # Create temporary installation root
 echo "Creating installation structure..."
@@ -25,7 +32,7 @@ trap "rm -rf $INSTALL_ROOT" EXIT
 
 # Install binary
 mkdir -p "$INSTALL_ROOT/usr/local/bin"
-cp target/release/family-policy "$INSTALL_ROOT/usr/local/bin/"
+cp "$BINARY_PATH" "$INSTALL_ROOT/usr/local/bin/family-policy"
 chmod 755 "$INSTALL_ROOT/usr/local/bin/family-policy"
 
 # Install LaunchDaemon
