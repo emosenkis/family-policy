@@ -14,9 +14,14 @@ Write-Host "Family Policy Agent - Windows Uninstallation" -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Stop service if running (placeholder for future service implementation)
-Write-Host "Stopping agent..." -ForegroundColor Yellow
-# TODO: Stop Windows Service when implemented
+# Stop and uninstall service if installed
+Write-Host "Checking for installed service..." -ForegroundColor Yellow
+$service = Get-Service -Name "FamilyPolicyAgent" -ErrorAction SilentlyContinue
+if ($service) {
+    Write-Host "Uninstalling Windows Service..." -ForegroundColor Yellow
+    & "$installDir\family-policy.exe" uninstall-service 2>$null
+    Write-Host "✓ Service uninstalled" -ForegroundColor Green
+}
 
 # Remove from PATH
 $installDir = "$env:ProgramFiles\FamilyPolicy"

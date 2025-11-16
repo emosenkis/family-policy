@@ -2,6 +2,10 @@
 name = "family-policy"
 version = "0.1.0"
 edition = "2024"
+description = "Browser Extension Policy Manager - Manages browser policies and privacy controls"
+homepage = "https://github.com/emosenkis/family-policy"
+license = "MIT OR Apache-2.0"
+authors = ["Family Policy Team"]
 
 [dependencies]
 anyhow = "1.0.100"
@@ -32,3 +36,9 @@ plist = "1.8.0"
 assert_fs = "1.1.3"
 predicates = "3.1.3"
 tempfile = "3.23.0"
+
+[package.metadata.wix]
+upgrade-guid = "E5F5E5F5-E5F5-E5F5-E5F5-E5F5E5F5E5F5"
+path-guid = "F5F5F5F5-F5F5-F5F5-F5F5-F5F5F5F5F5F5"
+license = false
+eula = false

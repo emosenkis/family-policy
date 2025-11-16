@@ -2,75 +2,62 @@
 
 This directory contains packaging configurations and build scripts for creating platform-specific installers.
 
+## Supported Packages
+
+| Platform | Package Type | Installer | Description |
+|----------|--------------|-----------|-------------|
+| Windows | MSI | ✅ | Windows Installer package |
+| macOS | PKG | ✅ | macOS installer package |
+| Linux | Binary | ✅ | Raw executable binary |
+
 ## Prerequisites
 
 ### All Platforms
 - Rust toolchain (for building the binary)
 - Git (for version control)
 
-### Debian/Ubuntu (DEB)
-```bash
-sudo apt-get install dpkg-dev
-```
-
-### Fedora/RHEL (RPM)
-```bash
-sudo dnf install rpm-build
-```
+### Windows (MSI)
+- WiX Toolset v3.14+
+- cargo-wix (`cargo install cargo-wix`)
 
 ### macOS (PKG)
 - Xcode Command Line Tools
 - macOS 10.15 or later
 
-### Windows (Installer)
-- PowerShell 5.1 or later
-- Administrator privileges
+### Linux
+- No special requirements (ships raw binary)
 
 ## Building Packages
 
-### Debian Package (.deb)
+### Windows MSI Package
 
-Build the DEB package for Debian/Ubuntu systems:
+Build the MSI installer for Windows:
 
-```bash
-cd packaging/debian
-./build-deb.sh
+```powershell
+# Install cargo-wix if not already installed
+cargo install cargo-wix
+
+# Build the MSI
+cargo wix --target x86_64-pc-windows-msvc
 ```
 
-Output: `dist/family-policy_0.1.0_amd64.deb`
+**Output:** `target/wix/family-policy-0.1.0-x86_64.msi`
 
 **Install:**
-```bash
-sudo dpkg -i dist/family-policy_0.1.0_amd64.deb
+- Double-click the MSI file, or:
+```powershell
+msiexec /i target\wix\family-policy-0.1.0-x86_64.msi
 ```
 
-**Remove:**
-```bash
-sudo dpkg -r family-policy
+**Uninstall:**
+- Via Windows Settings → Apps, or:
+```powershell
+msiexec /x target\wix\family-policy-0.1.0-x86_64.msi
 ```
 
-### RPM Package (.rpm)
+See `packaging/windows/README.md` for detailed Windows installation options.
 
-Build the RPM package for Fedora/RHEL systems:
-
-```bash
-cd packaging/rpm
-./build-rpm.sh
-```
-
-Output: `dist/family-policy-0.1.0-1.x86_64.rpm`
-
-**Install:**
-```bash
-sudo rpm -i dist/family-policy-0.1.0-1.x86_64.rpm
-```
-
-**Remove:**
-```bash
-sudo rpm -e family-policy
-```
-
-### macOS Package (.pkg)
+### macOS PKG Package
 
 Build the PKG installer for macOS (must be run on macOS):
 
@@ -79,156 +66,203 @@ cd packaging/macos
 ./build-pkg.sh
 ```
 
-Output: `dist/family-policy-0.1.0.pkg`
+**Output:** `dist/family-policy-0.1.0.pkg`
 
 **Install:**
 ```bash
 sudo installer -pkg dist/family-policy-0.1.0.pkg -target /
 ```
 
-**Remove:**
+**Uninstall:**
 ```bash
-sudo packaging/macos/uninstall.sh
+sudo /usr/local/bin/family-policy-uninstall.sh
 ```
 
-### Windows Installation
+### Linux Binary
 
-For Windows, use the PowerShell installation script:
+Linux ships as a raw binary:
 
-1. Build the binary for Windows (on Windows or cross-compile)
-2. Copy `family-policy.exe` to the `packaging/windows` directory
-3. Run as Administrator:
+```bash
+# Build the release binary
+cargo build --release --target x86_64-unknown-linux-gnu
 
-```powershell
-cd packaging\windows
-.\install.ps1
+# The binary is located at:
+# target/x86_64-unknown-linux-gnu/release/family-policy
+```
+
+**Install:**
+```bash
+sudo cp target/x86_64-unknown-linux-gnu/release/family-policy /usr/local/bin/
+sudo chmod 755 /usr/local/bin/family-policy
 ```
 
 **Uninstall:**
-```powershell
-.\uninstall.ps1
-```
-
-## Package Contents
-
-All packages include:
-
-1. **Binary**: `/usr/local/bin/family-policy` (or `C:\Program Files\FamilyPolicy\family-policy.exe` on Windows)
-2. **Service Files**:
-   - Linux: `/etc/systemd/system/family-policy-agent.service`
-   - macOS: `/Library/LaunchDaemons/com.family-policy.agent.plist`
-   - Windows: Task Scheduler integration (manual)
-3. **Configuration Directory**:
-   - Linux: `/etc/family-policy/`
-   - macOS: `/Library/Application Support/family-policy/`
-   - Windows: `C:\ProgramData\family-policy\`
-4. **State Directory**:
-   - Linux: `/var/lib/browser-extension-policy/`
-   - macOS: `/Library/Application Support/browser-extension-policy/`
-   - Windows: `C:\ProgramData\browser-extension-policy\`
-
-## Post-Installation
-
-After installing the package, configure the agent:
-
 ```bash
-# Configure agent
-sudo family-policy agent setup \
-  --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml \
-  --token YOUR_GITHUB_TOKEN
-
-# Install and start service
-sudo family-policy agent install
-sudo family-policy agent start
-
-# Check status
-sudo family-policy agent status
+sudo rm /usr/local/bin/family-policy
+sudo family-policy uninstall-service  # if service was installed
 ```
 
 ## Directory Structure
 
 ```
 packaging/
-├── README.md                    # This file
 ├── linux/
 │   ├── family-policy-agent.service  # Systemd service file
-│   ├── install.sh               # Manual installation script
-│   └── uninstall.sh             # Manual uninstallation script
-├── debian/
-│   ├── DEBIAN/
-│   │   ├── control              # Package metadata
-│   │   ├── postinst             # Post-installation script
-│   │   ├── prerm                # Pre-removal script
-│   │   └── postrm               # Post-removal script
-│   └── build-deb.sh             # DEB package build script
-├── rpm/
-│   ├── family-policy.spec       # RPM spec file
-│   └── build-rpm.sh             # RPM package build script
+│   ├── install.sh                   # Manual installation script
+│   └── uninstall.sh                 # Manual uninstallation script
 ├── macos/
-│   ├── com.family-policy.agent.plist  # LaunchDaemon plist
-│   ├── install.sh               # Manual installation script
-│   ├── uninstall.sh             # Manual uninstallation script
-│   └── build-pkg.sh             # PKG installer build script
-└── windows/
-    ├── install.ps1              # Installation script
-    └── uninstall.ps1            # Uninstallation script
+│   ├── build-pkg.sh                 # PKG build script
+│   ├── com.family-policy.agent.plist # LaunchDaemon plist
+│   ├── install.sh                   # Manual installation script
+│   └── uninstall.sh                 # Manual uninstallation script
+├── windows/
+│   ├── README.md                    # Windows installation guide
+│   ├── install.ps1                  # Manual installation script (ZIP)
+│   └── uninstall.ps1                # Manual uninstallation script (ZIP)
+└── README.md                        # This file
 ```
 
-## Cross-Platform Builds
+## CI/CD Integration
 
-### Building for Different Architectures
+The GitHub Actions workflow (`.github/workflows/release.yml`) automatically builds packages for all platforms:
 
-Use Rust's cross-compilation support:
+- **Windows**: Builds MSI package using cargo-wix
+- **macOS**: Builds PKG installer using native tools
+- **Linux**: Builds raw binary
 
+All artifacts are uploaded to GitHub releases.
+
+## Manual Installation Scripts
+
+Each platform provides manual installation scripts for users who prefer not to use installers:
+
+### Linux
 ```bash
-# Install cross-compilation toolchain
-rustup target add x86_64-unknown-linux-gnu
-rustup target add aarch64-unknown-linux-gnu
-rustup target add x86_64-apple-darwin
-rustup target add aarch64-apple-darwin
-rustup target add x86_64-pc-windows-gnu
-
-# Build for specific target
-cargo build --release --target x86_64-unknown-linux-gnu
+cd packaging/linux
+sudo ./install.sh
 ```
 
-### Using Docker for Linux Builds
-
-Build DEB and RPM packages in Docker containers to avoid installing build dependencies:
-
+### macOS
 ```bash
-# Debian/Ubuntu
-docker run --rm -v $(pwd):/workspace -w /workspace \
-  ubuntu:22.04 \
-  bash -c "apt-get update && apt-get install -y dpkg-dev && packaging/debian/build-deb.sh"
-
-# Fedora
-docker run --rm -v $(pwd):/workspace -w /workspace \
-  fedora:latest \
-  bash -c "dnf install -y rpm-build && packaging/rpm/build-rpm.sh"
+cd packaging/macos
+sudo ./install.sh
 ```
+
+### Windows
+```powershell
+cd packaging\windows
+.\install.ps1  # Run as Administrator
+```
+
+## Package Features
+
+### Windows MSI
+- ✅ Automatic PATH configuration
+- ✅ Creates config directories
+- ✅ Appears in "Add/Remove Programs"
+- ✅ Supports upgrades
+- ✅ Clean uninstallation
+
+### macOS PKG
+- ✅ Installs to `/usr/local/bin`
+- ✅ Includes LaunchDaemon for service
+- ✅ Creates config directories
+- ✅ Postinstall configuration
+
+### Linux Binary
+- ✅ Single static binary
+- ✅ No dependencies
+- ✅ Systemd service file included
+- ✅ Manual installation scripts
+
+## Version Management
+
+When releasing a new version:
+
+1. Update version in `Cargo.toml`
+2. Update version in package build scripts:
+   - `packaging/macos/build-pkg.sh` (VERSION variable)
+   - WiX configuration is auto-updated from `Cargo.toml`
+3. Tag the release: `git tag v0.1.0`
+4. Push the tag: `git push origin v0.1.0`
+5. GitHub Actions will automatically build all packages
+
+## Testing Packages
+
+### Windows MSI
+```powershell
+# Install in test VM
+msiexec /i family-policy-0.1.0-x86_64.msi
+
+# Verify installation
+family-policy --version
+
+# Test service installation
+family-policy install-service
+family-policy start
+
+# Uninstall
+msiexec /x family-policy-0.1.0-x86_64.msi
+```
+
+### macOS PKG
+```bash
+# Install
+sudo installer -pkg family-policy-0.1.0.pkg -target /
+
+# Verify
+family-policy --version
+
+# Test service
+sudo family-policy install-service
+
+# Uninstall
+sudo packaging/macos/uninstall.sh
+```
+
+### Linux Binary
+```bash
+# Install
+sudo cp family-policy /usr/local/bin/
+
+# Verify
+family-policy --version
+
+# Test service
+sudo family-policy install-service
+sudo systemctl start family-policy-agent
+
+# Uninstall
+sudo systemctl stop family-policy-agent
+sudo systemctl disable family-policy-agent
+sudo rm /usr/local/bin/family-policy
+```
+
+## Platform Comparison
+
+| Feature | Windows (MSI) | macOS (PKG) | Linux (Binary) |
+|---------|---------------|-------------|----------------|
+| Installer | ✅ | ✅ | ❌ (manual) |
+| Auto PATH | ✅ | ✅ | ❌ (manual) |
+| GUI Uninstall | ✅ | ❌ | ❌ |
+| Upgrades | ✅ | ✅ | Manual |
+| Service Install | CLI | CLI | CLI |
+| Config Dirs | Auto | Auto | Manual |
 
 ## Troubleshooting
 
-### DEB Package Build Fails
+### Windows MSI Build Fails
 
-**Issue**: `dpkg-deb: command not found`
+**Issue**: WiX not found
 
-**Solution**: Install dpkg-dev:
-```bash
-sudo apt-get install dpkg-dev
+**Solution**: Install WiX Toolset and ensure it's in PATH:
+```powershell
+# Download from: https://github.com/wixtoolset/wix3/releases
+# Or install cargo-wix which includes WiX
+cargo install cargo-wix
 ```
 
-### RPM Package Build Fails
-
-**Issue**: `rpmbuild: command not found`
-
-**Solution**: Install rpm-build:
-```bash
-sudo dnf install rpm-build
-```
-
-### macOS Package Build Fails
+### macOS PKG Build Fails
 
 **Issue**: `pkgbuild: command not found`
 
@@ -237,31 +271,18 @@ sudo dnf install rpm-build
 xcode-select --install
 ```
 
-### Permission Denied Errors
+### Linux Binary Won't Run
 
-All package build scripts and installation require appropriate permissions:
+**Issue**: Permission denied
 
-- **Linux/macOS**: Run with `sudo` or as root
-- **Windows**: Run PowerShell as Administrator
+**Solution**: Make binary executable:
+```bash
+chmod +x family-policy
+```
 
-## Versioning
+## Additional Resources
 
-To update the version number:
-
-1. Update `version` in `Cargo.toml`
-2. Update `VERSION` variable in build scripts:
-   - `packaging/debian/build-deb.sh`
-   - `packaging/rpm/build-rpm.sh`
-   - `packaging/macos/build-pkg.sh`
-3. Update version in `packaging/debian/DEBIAN/control`
-4. Update version in `packaging/rpm/family-policy.spec`
-5. Update changelog in `packaging/rpm/family-policy.spec`
-
-## Contributing
-
-When adding new features that require packaging changes:
-
-1. Update the appropriate service file (systemd, LaunchDaemon, etc.)
-2. Update installation scripts if new dependencies are required
-3. Test on all supported platforms
-4. Update this README with any new requirements
+- Windows Installation Guide: `packaging/windows/README.md`
+- WiX Configuration: `wix/main.wxs`
+- macOS LaunchDaemon: `packaging/macos/com.family-policy.agent.plist`
+- Linux Systemd Service: `packaging/linux/family-policy-agent.service`

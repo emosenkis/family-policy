@@ -48,11 +48,6 @@ New-Item -ItemType Directory -Force -Path $configDir | Out-Null
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 Write-Host "✓ Directories created" -ForegroundColor Green
 
-# Note about Windows Service
-Write-Host ""
-Write-Host "NOTE: Windows Service installation requires the service wrapper." -ForegroundColor Yellow
-Write-Host "For now, you can run the agent manually or use Task Scheduler." -ForegroundColor Yellow
-
 Write-Host ""
 Write-Host "Installation complete!" -ForegroundColor Green
 Write-Host ""
@@ -60,13 +55,17 @@ Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Open a new PowerShell window (to refresh PATH)" -ForegroundColor White
 Write-Host ""
 Write-Host "  2. Configure the agent:" -ForegroundColor White
-Write-Host "     family-policy setup ``" -ForegroundColor Gray
-Write-Host "       --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml ``" -ForegroundColor Gray
-Write-Host "       --token YOUR_GITHUB_TOKEN" -ForegroundColor Gray
+Write-Host "     family-policy config init" -ForegroundColor Gray
+Write-Host "     # Edit the generated config file, then apply it:" -ForegroundColor Gray
+Write-Host "     family-policy --config family-policy.yaml" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  3. Start the agent:" -ForegroundColor White
-Write-Host "     family-policy start --no-daemon" -ForegroundColor Gray
+Write-Host "  3. Install as Windows Service (optional, recommended):" -ForegroundColor White
+Write-Host "     family-policy install-service" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  4. Check status:" -ForegroundColor White
+Write-Host "  4. Start the agent:" -ForegroundColor White
+Write-Host "     family-policy start              # Start as service" -ForegroundColor Gray
+Write-Host "     family-policy start --no-daemon  # Or run in foreground" -ForegroundColor Gray
+Write-Host ""
+Write-Host "  5. Check status:" -ForegroundColor White
 Write-Host "     family-policy status" -ForegroundColor Gray
 Write-Host ""
