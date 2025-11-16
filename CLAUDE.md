@@ -99,7 +99,7 @@ Both modes share the same policy application logic (`src/policy/*.rs`) and state
 
 ### Policy implementation locations
 
-**Chrome/Edge (Chromium)**:
+**Chrome/Edge (Chromium)** - Share common implementation in `src/policy/chromium_common.rs`:
 - Windows: Registry at `HKLM\SOFTWARE\Policies\Google\Chrome` or `Microsoft\Edge`
 - macOS: Plist at `/Library/Managed Preferences/com.google.Chrome.plist` or `com.microsoft.Edge.plist`
 - Linux: JSON at `/etc/opt/chrome/policies/managed/` or `/etc/opt/microsoft/edge/policies/managed/`
@@ -109,6 +109,18 @@ Both modes share the same policy application logic (`src/policy/*.rs`) and state
 - Windows: `C:\Program Files\Mozilla Firefox\distribution\`
 - macOS: `/Applications/Firefox.app/Contents/Resources/distribution/`
 - Linux: `/etc/firefox/policies/`
+
+### Code organization improvements (2025-11-14/15)
+
+**Chromium Common Module**: Chrome and Edge policy modules (`src/policy/chrome.rs` and `src/policy/edge.rs`) now share common logic through `src/policy/chromium_common.rs`. This reduces code duplication by ~490 lines and makes it easier to add support for other Chromium-based browsers (Brave, Vivaldi, etc.).
+
+**Modular Command Structure**: Main entry point (`src/main.rs`) refactored from 888 lines to 36 lines (-95%). Command logic organized into focused modules:
+- `src/cli.rs` - CLI argument parsing (75 lines)
+- `src/commands/agent.rs` - Agent subcommands (549 lines)
+- `src/commands/local.rs` - Local mode operations (221 lines)
+- `src/commands/utils.rs` - Shared utilities (37 lines)
+
+This modular structure improves maintainability, testability, and adheres to Single Responsibility Principle.
 
 ### Privacy controls mapping
 

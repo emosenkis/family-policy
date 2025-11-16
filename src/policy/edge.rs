@@ -1,262 +1,46 @@
-use anyhow::{Context, Result};
-use serde_json::json;
+use anyhow::Result;
+use std::path::Path;
 
-use crate::browser::current_platform;
 use crate::config::EdgeConfig;
 use crate::state::BrowserState;
 
-/// Apply Edge policies (extensions and privacy controls)
-pub fn apply_edge_policies(config: &EdgeConfig) -> Result<BrowserState> {
-    let platform = current_platform();
+use super::chromium_common::{self, ChromiumBrowserConfig, ChromiumConfig};
 
-    // Apply platform-specific policies
-    match platform {
-        crate::browser::Platform::Windows => apply_edge_windows(config)?,
-        crate::browser::Platform::MacOS => apply_edge_macos(config)?,
-        crate::browser::Platform::Linux => apply_edge_linux(config)?,
+/// Edge-specific browser configuration
+fn get_edge_browser_config() -> ChromiumBrowserConfig {
+    ChromiumBrowserConfig {
+        browser_name: "Edge",
+        registry_key: r"SOFTWARE\Policies\Microsoft\Edge",
+        bundle_id: "com.microsoft.Edge",
+        policy_dir_fn: get_edge_policy_dir,
+    }
+}
+
+/// Get Edge policy directory (Linux)
+fn get_edge_policy_dir() -> &'static Path {
+    #[cfg(target_os = "linux")]
+    {
+        crate::platform::linux::get_edge_policy_dir()
     }
 
-    // Build and return state
-    let mut state = BrowserState::new();
-    state.extensions = config
-        .extensions
-        .iter()
-        .map(|e| e.id.clone())
-        .collect();
-    state.disable_inprivate = config.disable_inprivate;
-    state.disable_guest_mode = config.disable_guest_mode;
+    #[cfg(not(target_os = "linux"))]
+    {
+        Path::new("") // Not used on non-Linux platforms
+    }
+}
 
-    Ok(state)
+/// Apply Edge policies (extensions and privacy controls)
+pub fn apply_edge_policies(config: &EdgeConfig) -> Result<BrowserState> {
+    let chromium_config = ChromiumConfig::from_edge(config);
+    let browser_config = get_edge_browser_config();
+
+    chromium_common::apply_chromium_policies(&chromium_config, &browser_config)
 }
 
 /// Remove all Edge policies
 pub fn remove_edge_policies() -> Result<()> {
-    let platform = current_platform();
-
-    match platform {
-        crate::browser::Platform::Windows => remove_edge_windows()?,
-        crate::browser::Platform::MacOS => remove_edge_macos()?,
-        crate::browser::Platform::Linux => remove_edge_linux()?,
-    }
-
-    Ok(())
-}
-
-/// Apply Edge policies on Windows (via Registry)
-#[cfg(target_os = "windows")]
-fn apply_edge_windows(config: &EdgeConfig) -> Result<()> {
-    use crate::platform::windows::{write_registry_policy, write_registry_value, RegistryValue};
-
-    const EDGE_KEY: &str = r"SOFTWARE\Policies\Microsoft\Edge";
-
-    // Apply extension policies
-    if !config.extensions.is_empty() {
-        let extension_key = format!("{}\\ExtensionInstallForcelist", EDGE_KEY);
-        let extension_strings: Vec<String> = config
-            .extensions
-            .iter()
-            .map(|ext| format_edge_extension_entry(ext))
-            .collect();
-
-        write_registry_policy(&extension_key, extension_strings)
-            .context("Failed to write Edge extension policy to registry")?;
-    }
-
-    // Apply privacy controls
-    if let Some(disable_inprivate) = config.disable_inprivate {
-        if disable_inprivate {
-            write_registry_value(
-                EDGE_KEY,
-                "InPrivateModeAvailability",
-                RegistryValue::Dword(1), // 1 = Disabled
-            )
-            .context("Failed to write InPrivateModeAvailability to registry")?;
-        }
-    }
-
-    if let Some(disable_guest_mode) = config.disable_guest_mode {
-        write_registry_value(
-            EDGE_KEY,
-            "BrowserGuestModeEnabled",
-            RegistryValue::Dword(if disable_guest_mode { 0 } else { 1 }),
-        )
-        .context("Failed to write BrowserGuestModeEnabled to registry")?;
-    }
-
-    Ok(())
-}
-
-/// Apply Edge policies on macOS (via plist)
-#[cfg(target_os = "macos")]
-fn apply_edge_macos(config: &EdgeConfig) -> Result<()> {
-    use crate::platform::macos::{
-        bool_to_plist, integer_to_plist, string_vec_to_plist_array, write_plist_policy,
-    };
-    use std::collections::HashMap;
-
-    const EDGE_BUNDLE_ID: &str = "com.microsoft.Edge";
-    let mut updates = HashMap::new();
-
-    // Apply extension policies
-    if !config.extensions.is_empty() {
-        let extension_strings: Vec<String> = config
-            .extensions
-            .iter()
-            .map(|ext| format_edge_extension_entry(ext))
-            .collect();
-
-        updates.insert(
-            "ExtensionInstallForcelist".to_string(),
-            string_vec_to_plist_array(extension_strings),
-        );
-    }
-
-    // Apply privacy controls
-    if let Some(disable_inprivate) = config.disable_inprivate {
-        if disable_inprivate {
-            updates.insert(
-                "InPrivateModeAvailability".to_string(),
-                integer_to_plist(1), // 1 = Disabled
-            );
-        }
-    }
-
-    if let Some(disable_guest_mode) = config.disable_guest_mode {
-        updates.insert(
-            "BrowserGuestModeEnabled".to_string(),
-            bool_to_plist(!disable_guest_mode),
-        );
-    }
-
-    write_plist_policy(EDGE_BUNDLE_ID, updates)
-        .context("Failed to write Edge plist policy")?;
-
-    Ok(())
-}
-
-/// Apply Edge policies on Linux (via JSON)
-#[cfg(target_os = "linux")]
-fn apply_edge_linux(config: &EdgeConfig) -> Result<()> {
-    use crate::platform::linux::{get_edge_policy_dir, write_json_policy};
-
-    let mut policy = json!({});
-
-    // Apply extension policies
-    if !config.extensions.is_empty() {
-        let extension_strings: Vec<String> = config
-            .extensions
-            .iter()
-            .map(|ext| format_edge_extension_entry(ext))
-            .collect();
-
-        policy["ExtensionInstallForcelist"] = json!(extension_strings);
-    }
-
-    // Apply privacy controls
-    if let Some(disable_inprivate) = config.disable_inprivate {
-        if disable_inprivate {
-            policy["InPrivateModeAvailability"] = json!(1); // 1 = Disabled
-        }
-    }
-
-    if let Some(disable_guest_mode) = config.disable_guest_mode {
-        policy["BrowserGuestModeEnabled"] = json!(!disable_guest_mode);
-    }
-
-    write_json_policy(get_edge_policy_dir(), "browser-policy", policy)
-        .context("Failed to write Edge JSON policy")?;
-
-    Ok(())
-}
-
-/// Remove Edge policies on Windows
-#[cfg(target_os = "windows")]
-fn remove_edge_windows() -> Result<()> {
-    use crate::platform::windows::{remove_registry_policy, remove_registry_value};
-
-    const EDGE_KEY: &str = r"SOFTWARE\Policies\Microsoft\Edge";
-
-    // Remove extension policy
-    let extension_key = format!("{}\\ExtensionInstallForcelist", EDGE_KEY);
-    let _ = remove_registry_policy(&extension_key);
-
-    // Remove privacy controls
-    let _ = remove_registry_value(EDGE_KEY, "InPrivateModeAvailability");
-    let _ = remove_registry_value(EDGE_KEY, "BrowserGuestModeEnabled");
-
-    Ok(())
-}
-
-/// Remove Edge policies on macOS
-#[cfg(target_os = "macos")]
-fn remove_edge_macos() -> Result<()> {
-    use crate::platform::macos::remove_plist_keys;
-
-    const EDGE_BUNDLE_ID: &str = "com.microsoft.Edge";
-
-    let keys = vec![
-        "ExtensionInstallForcelist".to_string(),
-        "InPrivateModeAvailability".to_string(),
-        "BrowserGuestModeEnabled".to_string(),
-    ];
-
-    remove_plist_keys(EDGE_BUNDLE_ID, &keys)
-        .context("Failed to remove Edge plist keys")?;
-
-    Ok(())
-}
-
-/// Remove Edge policies on Linux
-#[cfg(target_os = "linux")]
-fn remove_edge_linux() -> Result<()> {
-    use crate::platform::linux::{get_edge_policy_dir, remove_json_policy};
-
-    remove_json_policy(get_edge_policy_dir(), "browser-policy")
-        .context("Failed to remove Edge JSON policy")?;
-
-    Ok(())
-}
-
-/// Format an Edge extension entry for policies
-/// Edge uses the same format as Chrome
-fn format_edge_extension_entry(ext: &crate::config::Extension) -> String {
-    let update_url = ext
-        .update_url
-        .as_deref()
-        .unwrap_or(crate::config::DEFAULT_CHROME_UPDATE_URL);
-
-    format!("{};{}", ext.id, update_url)
-}
-
-// Stub implementations for platforms not compiled
-#[cfg(not(target_os = "windows"))]
-fn apply_edge_windows(_config: &EdgeConfig) -> Result<()> {
-    anyhow::bail!("Windows platform not supported in this build")
-}
-
-#[cfg(not(target_os = "macos"))]
-fn apply_edge_macos(_config: &EdgeConfig) -> Result<()> {
-    anyhow::bail!("macOS platform not supported in this build")
-}
-
-#[cfg(not(target_os = "linux"))]
-fn apply_edge_linux(_config: &EdgeConfig) -> Result<()> {
-    anyhow::bail!("Linux platform not supported in this build")
-}
-
-#[cfg(not(target_os = "windows"))]
-fn remove_edge_windows() -> Result<()> {
-    Ok(())
-}
-
-#[cfg(not(target_os = "macos"))]
-fn remove_edge_macos() -> Result<()> {
-    Ok(())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn remove_edge_linux() -> Result<()> {
-    Ok(())
+    let browser_config = get_edge_browser_config();
+    chromium_common::remove_chromium_policies(&browser_config)
 }
 
 #[cfg(test)]
@@ -282,41 +66,6 @@ mod tests {
             disable_inprivate: None,
             disable_guest_mode: None,
         }
-    }
-
-    #[test]
-    fn test_format_edge_extension_entry_with_default_url() {
-        let ext = make_edge_extension("abcdefghijklmnopqrstuvwxyzabcdef", None);
-        let entry = format_edge_extension_entry(&ext);
-
-        assert_eq!(
-            entry,
-            "abcdefghijklmnopqrstuvwxyzabcdef;https://clients2.google.com/service/update2/crx"
-        );
-    }
-
-    #[test]
-    fn test_format_edge_extension_entry_with_custom_url() {
-        let ext = make_edge_extension(
-            "abcdefghijklmnopqrstuvwxyzabcdef",
-            Some("https://example.com/updates"),
-        );
-        let entry = format_edge_extension_entry(&ext);
-
-        assert_eq!(entry, "abcdefghijklmnopqrstuvwxyzabcdef;https://example.com/updates");
-    }
-
-    #[test]
-    fn test_format_edge_extension_entry_format() {
-        let ext = make_edge_extension("testid123456789012345678901234", None);
-        let entry = format_edge_extension_entry(&ext);
-
-        // Verify format is "id;url"
-        assert!(entry.contains(';'));
-        let parts: Vec<&str> = entry.split(';').collect();
-        assert_eq!(parts.len(), 2);
-        assert_eq!(parts[0], "testid123456789012345678901234");
-        assert!(parts[1].starts_with("https://"));
     }
 
     // Helper to build state from config (mimics what apply_edge_policies does for state)
@@ -422,10 +171,19 @@ mod tests {
     }
 
     #[test]
+    fn test_edge_browser_config() {
+        let config = get_edge_browser_config();
+        assert_eq!(config.browser_name, "Edge");
+        assert_eq!(config.registry_key, r"SOFTWARE\Policies\Microsoft\Edge");
+        assert_eq!(config.bundle_id, "com.microsoft.Edge");
+    }
+
+    #[test]
     fn test_edge_uses_same_format_as_chrome() {
         // Edge and Chrome use the same extension format
+        use super::super::chromium_common::format_chromium_extension_entry;
         let ext = make_edge_extension("testextension12345678901234567", Some("https://test.com/update"));
-        let entry = format_edge_extension_entry(&ext);
+        let entry = format_chromium_extension_entry(&ext);
 
         assert_eq!(entry, "testextension12345678901234567;https://test.com/update");
         assert!(entry.contains(';'));
