@@ -3,10 +3,11 @@ use sha2::{Digest, Sha256};
 use std::time::Duration;
 use tokio::time::sleep;
 
-use super::{AgentConfig, AgentState, GitHubPoller, PolicyFetchResult, PollingScheduler};
+use super::{AgentConfig, AgentState, GitHubPoller, PolicyFetchResult, PollingScheduler, TimeLimitsSettings};
 use crate::config;
 use crate::policy;
 use crate::state::AppliedPolicies;
+use crate::time_limits;
 
 /// Run the agent daemon in a loop
 pub async fn run_agent_daemon(config: AgentConfig) -> Result<()> {
@@ -17,6 +18,21 @@ pub async fn run_agent_daemon(config: AgentConfig) -> Result<()> {
         config.agent.poll_interval,
         config.agent.poll_jitter
     );
+
+    // Check if time limits are enabled
+    let time_limits_enabled = config.time_limits.as_ref().map(|tl| tl.enabled).unwrap_or(false);
+
+    if time_limits_enabled {
+        tracing::info!("Time limits tracking enabled");
+
+        // Spawn time tracking task concurrently
+        let time_limits_settings = config.time_limits.clone();
+        tokio::spawn(async move {
+            if let Err(e) = run_time_limits_tracking(time_limits_settings).await {
+                tracing::error!("Time limits tracking error: {:#}", e);
+            }
+        });
+    }
 
     let scheduler = PollingScheduler::new(config.agent.poll_interval, config.agent.poll_jitter);
 
@@ -190,6 +206,50 @@ impl config::Config {
         config::validate_config(&config)?;
 
         Ok(config)
+    }
+}
+
+/// Run time limits tracking (spawned as concurrent task when enabled)
+async fn run_time_limits_tracking(settings: Option<TimeLimitsSettings>) -> Result<()> {
+    let settings = settings.context("Time limits settings not provided")?;
+
+    if !settings.enabled {
+        tracing::info!("Time limits tracking is disabled");
+        return Ok(());
+    }
+
+    // Determine config path
+    let config_path = settings
+        .config_path
+        .unwrap_or_else(|| time_limits::config::get_config_path().unwrap());
+
+    // Check if config file exists
+    if !config_path.exists() {
+        tracing::warn!(
+            "Time limits config not found at: {}. Time tracking will not start.",
+            config_path.display()
+        );
+        tracing::warn!("Create a config with: family-policy time-limits init");
+        return Ok(());
+    }
+
+    // Load time limits configuration
+    let tl_config = time_limits::config::load_config(&config_path)
+        .context("Failed to load time limits configuration")?;
+
+    // Load or create state
+    let tl_state = time_limits::state::load_state()?
+        .unwrap_or_else(time_limits::state::TimeLimitsState::new);
+
+    // Create and start tracker
+    let tracker = time_limits::tracker::TimeTracker::new(tl_config, tl_state);
+
+    tracing::info!("Starting time limits tracking...");
+    tracker.start().await?;
+
+    // Keep the tracker running (it runs in background tasks)
+    loop {
+        tokio::time::sleep(Duration::from_secs(3600)).await;
     }
 }
 

@@ -1,14 +1,12 @@
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
-use tracing::info;
+use std::path::PathBuf;
 
 use crate::time_limits::config::{
     TimeLimitsConfig, AdminConfig, ChildProfile, TimeLimitSchedule,
     TimeLimit, SharedLoginConfig, EnforcementConfig,
     load_config, save_config, get_config_path, EXAMPLE_CONFIG,
 };
-use crate::time_limits::state::{load_state, save_state, TimeLimitsState, load_history};
-use crate::time_limits::tracker::TimeTracker;
+use crate::time_limits::state::{load_state, save_state, load_history};
 use crate::time_limits::auth::AdminAuth;
 use crate::time_limits::scheduler::ScheduleCalculator;
 
@@ -33,6 +31,10 @@ pub fn init(output: Option<PathBuf>, force: bool, _verbose: bool) -> Result<()> 
     println!("✓ Created time limits configuration file: {}", output_path.display());
     println!("\nEdit this file to configure time limits for your children.");
     println!("See the comments in the file for detailed configuration options.");
+    println!("\nTo enable time tracking, add this to your agent config (agent.conf):");
+    println!("\n[time_limits]");
+    println!("enabled = true");
+    println!("\nThen start the agent: sudo family-policy start");
 
     Ok(())
 }
@@ -104,57 +106,15 @@ pub fn add_child(
     println!("✓ Added child: {} ({})", name, id);
     println!("  Weekday limit: {} hours", weekday_hours);
     println!("  Weekend limit: {} hours", weekend_hours);
+    println!("\nTime tracking will automatically start when the agent runs.");
+    println!("Start the agent: sudo family-policy start");
 
-    Ok(())
-}
-
-/// Start the time tracking service
-pub async fn start_tracker(no_daemon: bool, _verbose: bool) -> Result<()> {
-    let config_path = get_config_path()?;
-
-    // Load config
-    let config = load_config(&config_path)
-        .context("Failed to load time limits configuration")?;
-
-    // Load or create state
-    let state = load_state()?.unwrap_or_else(TimeLimitsState::new);
-
-    // Create tracker
-    let tracker = TimeTracker::new(config, state);
-
-    println!("Starting time limits tracker...");
-
-    if no_daemon {
-        // Run in foreground
-        tracker.start().await?;
-        println!("✓ Time tracker started (foreground mode)");
-
-        // Keep running
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-        }
-    } else {
-        // TODO: Daemonize (for now, just run in foreground)
-        tracker.start().await?;
-        println!("✓ Time tracker started");
-
-        // Keep running
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-        }
-    }
-}
-
-/// Stop the time tracking service
-pub fn stop_tracker(_verbose: bool) -> Result<()> {
-    // TODO: Implement proper service stopping (send signal to daemon)
-    println!("✓ Stopped time tracker");
     Ok(())
 }
 
 /// Show current time limits status
-pub async fn status_tracker(_verbose: bool) -> Result<()> {
-    let state = load_state()?.context("No active time limits state found")?;
+pub async fn status(_verbose: bool) -> Result<()> {
+    let state = load_state()?.context("No active time limits state found.\nTime tracking may not be running.\nEnsure the agent is started with time_limits enabled.")?;
     let config_path = get_config_path()?;
     let config = load_config(&config_path)?;
 

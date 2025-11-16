@@ -118,7 +118,8 @@ Both modes share the same policy application logic (`src/policy/*.rs`) and state
 2. **State Layer** (`src/state.rs`): Tracks applied policies via state file for idempotency and clean uninstall
 3. **Policy Layer** (`src/policy/*.rs`): Browser-specific modules (chrome, firefox, edge) that handle policy application
 4. **Platform Layer** (`src/platform/*.rs`): OS-specific implementations (windows registry, macos plist, linux JSON)
-5. **Agent Layer** (`src/agent/*.rs`): GitHub polling, ETag-based change detection, and automatic policy application
+5. **Agent Layer** (`src/agent/*.rs`): GitHub polling, ETag-based change detection, automatic policy application, and optional time limits tracking
+6. **Time Limits Layer** (`src/time_limits/*.rs`): Screen time management with tracking, enforcement, and admin controls (runs within agent daemon when enabled)
 
 ### Key architectural patterns
 
@@ -130,7 +131,7 @@ Both modes share the same policy application logic (`src/policy/*.rs`) and state
 
 **Browser-specific translations**: Config supports multi-browser format. `to_browser_configs()` in `src/config.rs` translates to browser-specific configs (ChromeConfig, FirefoxConfig, EdgeConfig) with appropriate extension URLs and privacy policy mappings.
 
-**Agent polling**: Uses ETag headers for efficient change detection. Jittered polling interval to avoid thundering herd. Exponential backoff on failures. All GitHub communication via `reqwest` with TLS (`rustls-tls`).
+**Agent polling**: Uses ETag headers for efficient change detection. Jittered polling interval to avoid thundering herd. Exponential backoff on failures. All GitHub communication via `reqwest` with TLS (`rustls-tls`). Time limits tracking runs concurrently within the same daemon process when enabled in agent config.
 
 ### Policy implementation locations
 
@@ -238,15 +239,15 @@ See `src/config.rs` for full config structure and validation logic. See DESIGN.m
 
 ## Agent Architecture
 
-The agent system (`src/agent/`) implements GitHub-based remote policy management:
+The agent system (`src/agent/`) implements GitHub-based remote policy management and optional time limits tracking:
 
 - **Poller** (`poller.rs`): Fetches policy from raw GitHub URL using ETag for efficiency
 - **Scheduler** (`scheduler.rs`): Manages polling intervals with jitter to prevent synchronized requests
-- **Daemon** (`daemon.rs`): Main agent loop that polls, detects changes, and applies policies
-- **Config** (`config.rs`): Agent-specific configuration (GitHub URL, token, polling interval)
+- **Daemon** (`daemon.rs`): Main agent loop that polls, detects changes, applies policies, and optionally runs time tracking as a concurrent tokio task
+- **Config** (`config.rs`): Agent-specific configuration (GitHub URL, token, polling interval, optional time limits settings)
 - **State** (`state.rs`): Tracks ETag, last check time, last update time, and applied policies
 
-The agent validates policies before applying them and maintains a separate state file to track the current applied configuration and GitHub metadata.
+The agent validates policies before applying them and maintains a separate state file to track the current applied configuration and GitHub metadata. When time limits are enabled in the agent config, the daemon spawns a concurrent task that runs the time tracker alongside policy polling.
 
 ## Time Limits Feature (New - 2025-11-16)
 
@@ -267,11 +268,15 @@ family-policy time-limits add-child \
   --weekday-hours 2 \
   --weekend-hours 4
 
-# Start time tracking service (requires admin/root)
-sudo family-policy time-limits start-tracker
+# Enable time tracking in agent config (agent.conf):
+# [time_limits]
+# enabled = true
 
-# Show current status
-family-policy time-limits status-tracker
+# Start the unified agent daemon (includes time tracking if enabled)
+sudo family-policy start
+
+# Show current status (time limits and browser policies)
+family-policy status
 
 # Grant time extension (admin)
 family-policy time-limits grant-extension alice 30 \
@@ -290,11 +295,11 @@ family-policy time-limits history alice --days 7
 
 ### Time Limits Architecture
 
-The time limits system (`src/time_limits/`) implements comprehensive screen time management:
+The time limits system (`src/time_limits/`) implements comprehensive screen time management. Time tracking runs as a concurrent task within the unified agent daemon (not as a separate service):
 
 - **Config** (`config.rs`): Child profiles, time limits (weekday/weekend/custom), warnings, enforcement settings
 - **State** (`state.rs`): Daily usage tracking, session management, admin overrides, usage history
-- **Tracker** (`tracker.rs`): Background daemon that tracks time in 10-second intervals, manages active sessions
+- **Tracker** (`tracker.rs`): Background task that tracks time in 10-second intervals, manages active sessions (runs within agent daemon)
 - **Enforcement** (`enforcement.rs`): Handles warnings, grace periods, and computer locking
 - **Scheduler** (`scheduler.rs`): Calculates time limits based on day of week and custom overrides
 - **Auth** (`auth.rs`): Admin password hashing (Argon2id), verification, rate limiting

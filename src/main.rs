@@ -73,14 +73,8 @@ async fn run_time_limits_command(command: TimeLimitsCommands, verbose: bool) -> 
         TimeLimitsCommands::AddChild { id, name, os_users, weekday_hours, weekend_hours } => {
             commands::time_limits::add_child(id, name, os_users, weekday_hours, weekend_hours, verbose)
         }
-        TimeLimitsCommands::StartTracker { no_daemon } => {
-            commands::time_limits::start_tracker(no_daemon, verbose).await
-        }
-        TimeLimitsCommands::StopTracker => {
-            commands::time_limits::stop_tracker(verbose)
-        }
-        TimeLimitsCommands::StatusTracker => {
-            commands::time_limits::status_tracker(verbose).await
+        TimeLimitsCommands::Status => {
+            commands::time_limits::status(verbose).await
         }
         TimeLimitsCommands::GrantExtension { child_id, minutes, password, reason } => {
             commands::time_limits::grant_extension(child_id, minutes, password, reason, verbose).await

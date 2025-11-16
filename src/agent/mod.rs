@@ -10,7 +10,7 @@ mod poller;
 mod scheduler;
 mod state;
 
-pub use config::{AgentConfig, AgentSettings, GitHubConfig, LoggingConfig, SecurityConfig, get_agent_config_path};
+pub use config::{AgentConfig, AgentSettings, GitHubConfig, LoggingConfig, SecurityConfig, TimeLimitsSettings, get_agent_config_path};
 pub use daemon::{run_agent_daemon, check_and_apply_once};
 pub use poller::{GitHubPoller, PolicyFetchResult};
 pub use scheduler::PollingScheduler;

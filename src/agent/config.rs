@@ -11,6 +11,9 @@ pub struct AgentConfig {
     pub logging: LoggingConfig,
     #[serde(default)]
     pub security: SecurityConfig,
+    /// Optional: Enable time limits tracking
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_limits: Option<TimeLimitsSettings>,
 }
 
 /// GitHub repository settings
@@ -63,6 +66,23 @@ pub struct SecurityConfig {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trusted_key: Option<String>,
+}
+
+/// Time limits settings (optional, enables time tracking in agent mode)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TimeLimitsSettings {
+    /// Enable time limits tracking
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Path to time limits configuration file
+    /// If not specified, uses default platform-specific path
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_path: Option<PathBuf>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 // Default values

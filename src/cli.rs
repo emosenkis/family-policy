@@ -95,16 +95,8 @@ pub enum TimeLimitsCommands {
         #[arg(long)]
         weekend_hours: u32,
     },
-    /// Start time tracking service
-    StartTracker {
-        /// Run in foreground (don't daemonize)
-        #[arg(long)]
-        no_daemon: bool,
-    },
-    /// Stop time tracking service
-    StopTracker,
     /// Show current time limits status
-    StatusTracker,
+    Status,
     /// Grant time extension (admin)
     GrantExtension {
         /// Child ID
