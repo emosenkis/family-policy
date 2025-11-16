@@ -86,6 +86,14 @@
                     Part='last'
                     Action='set'
                     System='yes' />
+                <!-- Registry entry serves as KeyPath for this component -->
+                <RegistryValue
+                    Root='HKLM'
+                    Key='Software\[Manufacturer]\[ProductName]'
+                    Name='PathInstalled'
+                    Type='integer'
+                    Value='1'
+                    KeyPath='yes' />
             </Component>
         </DirectoryRef>
 
@@ -117,7 +125,7 @@
         <CustomAction
             Id='SetPostInstallMessage'
             Property='POSTINSTALLMESSAGE'
-            Value='Family Policy Agent has been installed successfully!&#xD;&#xA;&#xD;&#xA;Next steps:&#xD;&#xA;1. Open a new Command Prompt or PowerShell (to refresh PATH)&#xD;&#xA;2. Create a config: family-policy config init&#xD;&#xA;3. Apply policies: family-policy --config family-policy.yaml&#xD;&#xA;4. (Optional) Install as service: family-policy install-service&#xD;&#xA;5. Start the agent: family-policy start' />
+            Value='Family Policy Agent installed successfully!&#xD;&#xA;&#xD;&#xA;Run: family-policy config init&#xD;&#xA;Then: family-policy --config family-policy.yaml' />
 
     </Product>
 
