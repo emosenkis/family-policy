@@ -14,9 +14,9 @@ if [ "$(uname)" != "Darwin" ]; then
     exit 1
 fi
 
-# Build the binary in release mode
-echo "Building release binary..."
-cargo build --release
+# Binary should already be built by CI or manually
+# If running locally, ensure you've run: cargo build --release
+# If running in CI, the universal binary is already built
 
 # Create temporary installation root
 echo "Creating installation structure..."

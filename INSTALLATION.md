@@ -4,35 +4,18 @@ This guide covers installation methods for all supported platforms.
 
 ## Quick Start
 
-### Linux (Debian/Ubuntu)
+### Linux
 
 ```bash
-# Download and install the DEB package
-sudo dpkg -i family-policy_0.1.0_amd64.deb
+# Download the binary
+wget https://github.com/USER/REPO/releases/latest/download/family-policy-linux-x86_64
+chmod +x family-policy-linux-x86_64
+sudo mv family-policy-linux-x86_64 /usr/local/bin/family-policy
 
 # Configure the agent
-sudo family-policy setup \
-  --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml \
-  --token YOUR_GITHUB_TOKEN
-
-# Install and start as a service
-sudo family-policy install-service
-sudo family-policy start
-
-# Check status
-sudo family-policy status
-```
-
-### Linux (Fedora/RHEL)
-
-```bash
-# Download and install the RPM package
-sudo rpm -i family-policy-0.1.0-1.x86_64.rpm
-
-# Configure the agent
-sudo family-policy setup \
-  --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml \
-  --token YOUR_GITHUB_TOKEN
+sudo family-policy config init
+# Edit the generated config file, then apply:
+sudo family-policy --config family-policy.yaml
 
 # Install and start as a service
 sudo family-policy install-service
@@ -78,49 +61,60 @@ family-policy start --no-daemon
 
 ## Installation Methods
 
-### Method 1: Package Managers (Recommended)
+### Method 1: Platform Installers (Recommended)
 
-Use platform-specific package managers for automatic dependency resolution and easy updates.
+Use platform-specific installers for easy installation and updates.
 
-#### Debian/Ubuntu (.deb)
+#### Windows (.msi)
 
-```bash
-# Install
-sudo dpkg -i family-policy_VERSION_amd64.deb
+```powershell
+# Download the MSI from GitHub releases
+# Double-click to install, or use command line:
+msiexec /i family-policy-VERSION-x86_64.msi
 
-# Uninstall
-sudo dpkg -r family-policy
+# The installer will:
+# - Install to C:\Program Files\FamilyPolicy\
+# - Add to system PATH automatically
+# - Create config directories
 
-# Purge (removes configuration too)
-sudo dpkg -P family-policy
-```
+# Verify installation
+family-policy --version
 
-#### Fedora/RHEL (.rpm)
-
-```bash
-# Install
-sudo rpm -i family-policy-VERSION.x86_64.rpm
-
-# Upgrade
-sudo rpm -U family-policy-VERSION.x86_64.rpm
-
-# Uninstall
-sudo rpm -e family-policy
+# Uninstall via Windows Settings → Apps, or:
+msiexec /x family-policy-VERSION-x86_64.msi
 ```
 
 #### macOS (.pkg)
 
 ```bash
-# Install
+# Download and install the PKG
 sudo installer -pkg family-policy-VERSION.pkg -target /
+
+# Verify installation
+family-policy --version
 
 # Uninstall (use the provided script)
 sudo /usr/local/bin/family-policy-uninstall.sh
 ```
 
+#### Linux (Binary)
+
+```bash
+# Download the binary from GitHub releases
+wget https://github.com/USER/REPO/releases/download/vVERSION/family-policy-linux-x86_64
+chmod +x family-policy-linux-x86_64
+sudo mv family-policy-linux-x86_64 /usr/local/bin/family-policy
+
+# Verify installation
+family-policy --version
+
+# Uninstall
+sudo rm /usr/local/bin/family-policy
+```
+
 ### Method 2: Manual Installation
 
-If packages are not available for your platform, install manually using the provided scripts.
+For advanced users or custom installation paths.
 
 #### Linux
 

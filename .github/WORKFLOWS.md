@@ -14,9 +14,7 @@ This document explains the CI/CD workflows configured for this project.
 
 1. **Build Linux (x86_64)**
    - Builds release binary for Linux
-   - Creates DEB package for Debian/Ubuntu
-   - Creates RPM package for Fedora/RHEL
-   - Uploads all artifacts
+   - Uploads binary artifact
 
 2. **Build macOS (Universal)**
    - Builds for Intel (x86_64)
@@ -27,7 +25,8 @@ This document explains the CI/CD workflows configured for this project.
 
 3. **Build Windows (x86_64)**
    - Builds release binary for Windows
-   - Creates ZIP archive with installation scripts
+   - Creates MSI installer package
+   - Creates ZIP archive with installation scripts (legacy)
    - Uploads all artifacts
 
 4. **Create Release Assets**
@@ -39,9 +38,9 @@ This document explains the CI/CD workflows configured for this project.
 
 | Platform | Runner | Target | Output |
 |----------|--------|--------|--------|
-| Linux | ubuntu-latest | x86_64-unknown-linux-gnu | Binary, DEB, RPM |
+| Linux | ubuntu-latest | x86_64-unknown-linux-gnu | Binary |
 | macOS | macos-latest | x86_64/aarch64-apple-darwin | Universal Binary, PKG |
-| Windows | windows-latest | x86_64-pc-windows-msvc | Binary, ZIP |
+| Windows | windows-latest | x86_64-pc-windows-msvc | Binary, MSI, ZIP |
 
 #### Caching
 
@@ -125,17 +124,14 @@ After a successful workflow run, these artifacts are created:
    - `family-policy-macos-universal`
    - `family-policy-windows-x86_64.exe`
 
-2. **Linux Packages**
-   - `family-policy_VERSION_amd64.deb` (Debian/Ubuntu)
-   - `family-policy-VERSION.x86_64.rpm` (Fedora/RHEL)
-
-3. **macOS Package**
+2. **macOS Package**
    - `family-policy-VERSION.pkg`
 
-4. **Windows Archive**
-   - `family-policy-windows-x86_64.zip` (includes scripts)
+3. **Windows Packages**
+   - `family-policy-VERSION-x86_64.msi` (Installer)
+   - `family-policy-windows-x86_64.zip` (Legacy manual install)
 
-5. **Checksums**
+4. **Checksums**
    - `SHA256SUMS` (checksums for all files)
 
 ### Downloading Artifacts
@@ -146,7 +142,7 @@ After a successful workflow run, these artifacts are created:
 wget https://github.com/USERNAME/family-policy/releases/latest/download/family-policy-linux-x86_64
 
 # Specific version
-wget https://github.com/USERNAME/family-policy/releases/download/v0.1.0/family-policy_0.1.0_amd64.deb
+wget https://github.com/USERNAME/family-policy/releases/download/v0.1.0/family-policy-linux-x86_64
 ```
 
 **From Workflow Run** (requires authentication):
@@ -163,11 +159,8 @@ Before creating a release, ensure:
 - [ ] Code builds on all platforms (or trust CI)
 - [ ] Version updated in:
   - [ ] `Cargo.toml`
-  - [ ] `packaging/debian/DEBIAN/control`
-  - [ ] `packaging/debian/build-deb.sh`
-  - [ ] `packaging/rpm/family-policy.spec` (Version + Release)
-  - [ ] `packaging/rpm/build-rpm.sh`
   - [ ] `packaging/macos/build-pkg.sh`
+  - [ ] WiX configuration (auto-synced from Cargo.toml)
 - [ ] CHANGELOG.md updated (if you maintain one)
 - [ ] Documentation is current
 - [ ] All changes are committed

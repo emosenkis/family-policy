@@ -9,7 +9,7 @@ Use this template when creating a new release.
 - Support for Chrome, Firefox, and Edge browsers
 - Multi-browser policy configuration format
 - Privacy controls (disable private/incognito modes, guest mode)
-- Platform-specific installers (DEB, RPM, PKG)
+- Platform-specific installers (MSI, PKG)
 - Service/daemon installation for automatic startup
 - ETag-based efficient policy updates
 
@@ -27,16 +27,11 @@ Use this template when creating a new release.
 
 ### Installation
 
-#### Linux (Debian/Ubuntu)
+#### Linux
 ```bash
-wget https://github.com/USERNAME/family-policy/releases/download/v0.1.0/family-policy_0.1.0_amd64.deb
-sudo dpkg -i family-policy_0.1.0_amd64.deb
-```
-
-#### Linux (Fedora/RHEL)
-```bash
-wget https://github.com/USERNAME/family-policy/releases/download/v0.1.0/family-policy-0.1.0-1.x86_64.rpm
-sudo rpm -i family-policy-0.1.0-1.x86_64.rpm
+wget https://github.com/USERNAME/family-policy/releases/download/v0.1.0/family-policy-linux-x86_64
+chmod +x family-policy-linux-x86_64
+sudo mv family-policy-linux-x86_64 /usr/local/bin/family-policy
 ```
 
 #### macOS
@@ -46,6 +41,11 @@ sudo installer -pkg family-policy-0.1.0.pkg -target /
 ```
 
 #### Windows
+**Option 1: MSI Installer (Recommended)**
+1. Download `family-policy-0.1.0-x86_64.msi`
+2. Double-click to install
+
+**Option 2: Manual Install**
 1. Download `family-policy-windows-x86_64.zip`
 2. Extract to a folder
 3. Run PowerShell as Administrator
@@ -81,16 +81,14 @@ See attached `SHA256SUMS` file for binary checksums.
 
 ### Assets
 - `family-policy-linux-x86_64` - Linux binary (standalone)
-- `family-policy_0.1.0_amd64.deb` - Debian/Ubuntu package
-- `family-policy-0.1.0-1.x86_64.rpm` - Fedora/RHEL package
 - `family-policy-macos-universal` - macOS binary (Universal - Intel + Apple Silicon)
 - `family-policy-0.1.0.pkg` - macOS installer package
 - `family-policy-windows-x86_64.exe` - Windows binary (standalone)
-- `family-policy-windows-x86_64.zip` - Windows package with scripts
+- `family-policy-0.1.0-x86_64.msi` - Windows MSI installer (recommended)
+- `family-policy-windows-x86_64.zip` - Windows manual install package
 - `SHA256SUMS` - Checksums for verification
 
 ### Known Issues
-- Windows: No native service support yet. Use `--no-daemon` or Task Scheduler.
 - Some antivirus software may flag the binary. This is a false positive (unsigned binary).
 
 ### Documentation

@@ -72,12 +72,57 @@ pub fn install_service(verbose: bool) -> Result<()> {
 
     #[cfg(target_os = "windows")]
     {
-        println!("Windows Service installation is not yet implemented.");
+        // For Windows, use sc.exe to create service
+        println!("Creating Windows Service...");
+
+        // Get binary path
+        let current_exe = std::env::current_exe()?;
+        let bin_path = current_exe.to_string_lossy().to_string();
+
+        // Service configuration
+        let service_name = "FamilyPolicyAgent";
+        let display_name = "Family Policy Agent";
+        let description = "Browser Extension Policy Management - Automatically manages browser policies via GitHub polling";
+
+        // Create service with sc.exe
+        // binPath must include the full command with arguments
+        let bin_path_with_args = format!("\"{}\" start --no-daemon", bin_path);
+
+        let output = std::process::Command::new("sc.exe")
+            .args(&["create", service_name])
+            .arg(format!("binPath= {}", bin_path_with_args))
+            .arg("start= auto")
+            .arg(format!("DisplayName= {}", display_name))
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            anyhow::bail!("Failed to create service:\n{}\n{}", stdout, error);
+        }
+
+        println!("✓ Service created");
+
+        // Set service description
+        let _ = std::process::Command::new("sc.exe")
+            .args(&["description", service_name, description])
+            .output();
+
+        // Configure service recovery options (restart on failure)
+        let _ = std::process::Command::new("sc.exe")
+            .args(&["failure", service_name, "reset= 86400", "actions= restart/10000/restart/10000/restart/10000"])
+            .output();
+
+        println!("✓ Service recovery configured");
         println!();
-        println!("You can run the agent manually:");
-        println!("  family-policy start --no-daemon");
+        println!("Service installed successfully!");
         println!();
-        println!("Or use Task Scheduler to run it at startup.");
+        println!("To start the service:");
+        println!("  family-policy start");
+        println!();
+        println!("To check status:");
+        println!("  family-policy status");
+        println!("  sc.exe query {}", service_name);
     }
 
     Ok(())
@@ -140,7 +185,39 @@ pub fn uninstall_service(verbose: bool) -> Result<()> {
 
     #[cfg(target_os = "windows")]
     {
-        println!("Windows Service is not installed.");
+        let service_name = "FamilyPolicyAgent";
+
+        // Stop service first
+        println!("Stopping service...");
+        let output = std::process::Command::new("sc.exe")
+            .args(&["stop", service_name])
+            .output()?;
+
+        // Don't fail if service is already stopped
+        if output.status.success() {
+            // Wait a moment for service to fully stop
+            std::thread::sleep(std::time::Duration::from_secs(2));
+        }
+
+        // Delete the service
+        println!("Removing service...");
+        let output = std::process::Command::new("sc.exe")
+            .args(&["delete", service_name])
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // Check if error is just "service doesn't exist"
+            if stdout.contains("does not exist") || stdout.contains("1060") {
+                println!("Service was not installed");
+            } else {
+                println!("Warning: Failed to remove service:\n{}\n{}", stdout, error);
+            }
+        } else {
+            println!("✓ Service removed");
+        }
     }
 
     println!();
@@ -216,7 +293,35 @@ pub fn start(no_daemon: bool, verbose: bool) -> Result<()> {
 
         #[cfg(target_os = "windows")]
         {
-            anyhow::bail!("Daemon mode not yet implemented on Windows. Use --no-daemon to run in foreground.");
+            let service_name = "FamilyPolicyAgent";
+
+            println!("Starting Windows Service...");
+            let output = std::process::Command::new("sc.exe")
+                .args(&["start", service_name])
+                .output()?;
+
+            if !output.status.success() {
+                let error = String::from_utf8_lossy(&output.stderr);
+                let stdout = String::from_utf8_lossy(&output.stdout);
+
+                // Check if error is "service doesn't exist"
+                if stdout.contains("does not exist") || stdout.contains("1060") {
+                    anyhow::bail!("Service not installed. Run 'family-policy install-service' first.");
+                } else if stdout.contains("already started") || stdout.contains("1056") {
+                    println!("Service is already running");
+                } else {
+                    anyhow::bail!("Failed to start service:\n{}\n{}", stdout, error);
+                }
+            } else {
+                println!("✓ Service started successfully");
+            }
+
+            println!();
+            println!("To check status:");
+            println!("  family-policy status");
+            println!("  sc.exe query {}", service_name);
+
+            Ok(())
         }
     }
 }
@@ -271,8 +376,29 @@ pub fn stop(verbose: bool) -> Result<()> {
 
     #[cfg(target_os = "windows")]
     {
-        println!("No Windows Service is running.");
-        println!("If you started the agent manually, press Ctrl+C to stop it.");
+        let service_name = "FamilyPolicyAgent";
+
+        let output = std::process::Command::new("sc.exe")
+            .args(&["stop", service_name])
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            // Check if error is "service doesn't exist" or "not started"
+            if stdout.contains("does not exist") || stdout.contains("1060") {
+                println!("Service is not installed");
+                println!();
+                println!("If you started the agent manually, press Ctrl+C to stop it.");
+            } else if stdout.contains("not started") || stdout.contains("1062") {
+                println!("Service is not running");
+            } else {
+                anyhow::bail!("Failed to stop service:\n{}\n{}", stdout, error);
+            }
+        } else {
+            println!("✓ Service stopped successfully");
+        }
     }
 
     Ok(())

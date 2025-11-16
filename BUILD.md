@@ -146,9 +146,8 @@ The easiest way to build for all platforms is to use the included GitHub Actions
    - Build for Linux (x86_64)
    - Build for macOS (Universal - Intel + Apple Silicon)
    - Build for Windows (x86_64)
-   - Create DEB and RPM packages
    - Create macOS PKG installer
-   - Create Windows ZIP archive
+   - Create Windows MSI installer
    - Upload all artifacts to the release
 
 ### Manual Workflow Trigger
@@ -199,17 +198,15 @@ See [packaging/README.md](packaging/README.md) for detailed instructions on crea
 ### Quick Reference
 
 ```bash
-# Debian/Ubuntu (.deb)
-cd packaging/debian && ./build-deb.sh
-
-# Fedora/RHEL (.rpm)
-cd packaging/rpm && ./build-rpm.sh
-
 # macOS (.pkg) - requires macOS
 cd packaging/macos && ./build-pkg.sh
 
-# Windows (ZIP)
-# Build on Windows, then package with PowerShell scripts
+# Windows (MSI) - requires Windows with WiX
+cargo install cargo-wix
+cargo wix --target x86_64-pc-windows-msvc
+
+# Linux - ships as raw binary
+cargo build --release --target x86_64-unknown-linux-gnu
 ```
 
 ## Troubleshooting
@@ -285,11 +282,8 @@ Before creating a release:
 
 1. ✅ Update version in `Cargo.toml`
 2. ✅ Update version in packaging scripts:
-   - `packaging/debian/DEBIAN/control`
-   - `packaging/debian/build-deb.sh`
-   - `packaging/rpm/family-policy.spec`
-   - `packaging/rpm/build-rpm.sh`
    - `packaging/macos/build-pkg.sh`
+   - WiX (automatically syncs from Cargo.toml)
 3. ✅ Update CHANGELOG.md
 4. ✅ Run full test suite: `cargo test`
 5. ✅ Test builds on all platforms (or use GitHub Actions)

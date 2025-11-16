@@ -1,0 +1,124 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<!--
+  Family Policy Agent - Windows Installer (WiX)
+
+  This installer:
+  - Installs the binary to Program Files
+  - Adds the binary to system PATH
+  - Creates necessary configuration directories
+  - Does NOT automatically install the service (user runs CLI command)
+-->
+
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+
+    <?define ProductName = "Family Policy Agent" ?>
+    <?define ProductVersion = "0.1.0" ?>
+    <?define Manufacturer = "Family Policy Team" ?>
+
+    <Product
+        Id='*'
+        Name='$(var.ProductName)'
+        UpgradeCode='E5F5E5F5-E5F5-E5F5-E5F5-E5F5E5F5E5F5'
+        Manufacturer='$(var.Manufacturer)'
+        Language='1033'
+        Codepage='1252'
+        Version='$(var.ProductVersion)'>
+
+        <Package
+            Id='*'
+            Keywords='Installer'
+            Description='Browser Extension Policy Manager'
+            Manufacturer='$(var.Manufacturer)'
+            InstallerVersion='450'
+            Languages='1033'
+            Compressed='yes'
+            SummaryCodepage='1252'
+            InstallScope='perMachine'
+            InstallPrivileges='elevated' />
+
+        <MajorUpgrade
+            Schedule='afterInstallInitialize'
+            DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.' />
+
+        <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1' />
+        <Property Id='DiskPrompt' Value='Family Policy Agent Installation' />
+
+        <!-- Installation directory -->
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id='ProgramFiles64Folder'>
+                <Directory Id='APPLICATIONROOTDIRECTORY' Name='FamilyPolicy'>
+                    <!-- Binary will be placed here by cargo-wix -->
+                </Directory>
+            </Directory>
+
+            <!-- Configuration directories -->
+            <Directory Id='CommonAppDataFolder'>
+                <Directory Id='ConfigDir' Name='family-policy'>
+                    <Component Id='ConfigDirComponent' Guid='D1D1D1D1-D1D1-D1D1-D1D1-D1D1D1D1D1D1'>
+                        <CreateFolder />
+                    </Component>
+                </Directory>
+                <Directory Id='StateDir' Name='browser-extension-policy'>
+                    <Component Id='StateDirComponent' Guid='D2D2D2D2-D2D2-D2D2-D2D2-D2D2D2D2D2D2'>
+                        <CreateFolder />
+                    </Component>
+                </Directory>
+            </Directory>
+        </Directory>
+
+        <!-- Binary installation -->
+        <DirectoryRef Id='APPLICATIONROOTDIRECTORY'>
+            <Component Id='MainExecutable' Guid='B1B1B1B1-B1B1-B1B1-B1B1-B1B1B1B1B1B1'>
+                <File
+                    Id='FamilyPolicyEXE'
+                    Name='family-policy.exe'
+                    DiskId='1'
+                    Source='$(var.CargoTargetBinDir)\family-policy.exe'
+                    KeyPath='yes' />
+            </Component>
+
+            <Component Id='Path' Guid='F5F5F5F5-F5F5-F5F5-F5F5-F5F5F5F5F5F5'>
+                <Environment
+                    Id='PATH'
+                    Name='PATH'
+                    Value='[APPLICATIONROOTDIRECTORY]'
+                    Permanent='no'
+                    Part='last'
+                    Action='set'
+                    System='yes' />
+            </Component>
+        </DirectoryRef>
+
+        <!-- Feature definition -->
+        <Feature
+            Id='Complete'
+            Title='Family Policy Agent'
+            Description='The complete package.'
+            Display='expand'
+            Level='1'
+            ConfigurableDirectory='APPLICATIONROOTDIRECTORY'
+            AllowAdvertise='no'
+            Absent='disallow'>
+
+            <ComponentRef Id='MainExecutable' />
+            <ComponentRef Id='Path' />
+            <ComponentRef Id='ConfigDirComponent' />
+            <ComponentRef Id='StateDirComponent' />
+        </Feature>
+
+        <!-- UI -->
+        <UIRef Id='WixUI_InstallDir' />
+        <Property Id='WIXUI_INSTALLDIR' Value='APPLICATIONROOTDIRECTORY' />
+
+        <!-- Skip license dialog since we set license=false in Cargo.toml -->
+        <WixVariable Id='WixUILicenseRtf' Value='wix\License.rtf' Overridable='yes' />
+
+        <!-- Custom actions for post-install information -->
+        <CustomAction
+            Id='SetPostInstallMessage'
+            Property='POSTINSTALLMESSAGE'
+            Value='Family Policy Agent has been installed successfully!&#xD;&#xA;&#xD;&#xA;Next steps:&#xD;&#xA;1. Open a new Command Prompt or PowerShell (to refresh PATH)&#xD;&#xA;2. Create a config: family-policy config init&#xD;&#xA;3. Apply policies: family-policy --config family-policy.yaml&#xD;&#xA;4. (Optional) Install as service: family-policy install-service&#xD;&#xA;5. Start the agent: family-policy start' />
+
+    </Product>
+
+</Wix>

@@ -47,38 +47,11 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target x86_64-unknown-linux-gnu
 
-      - name: Install packaging dependencies
-        run: sudo apt-get update && sudo apt-get install -y dpkg-dev rpm
-
-      - name: Build DEB package
-        run: |
-          chmod +x packaging/debian/build-deb.sh
-          cd packaging/debian
-          ./build-deb.sh
-
-      - name: Build RPM package
-        run: |
-          chmod +x packaging/rpm/build-rpm.sh
-          cd packaging/rpm
-          ./build-rpm.sh
-
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
         with:
           name: family-policy-linux-x86_64
           path: target/x86_64-unknown-linux-gnu/release/family-policy
-
-      - name: Upload DEB package
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-deb
-          path: dist/*.deb
-
-      - name: Upload RPM package
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-rpm
-          path: dist/*.rpm
 
   build-macos:
     name: Build macOS (Universal)
@@ -184,7 +157,32 @@ jobs:
           name: family-policy-windows-x86_64
           path: target/x86_64-pc-windows-msvc/release/family-policy.exe
 
-      - name: Create ZIP archive
+      - name: Install WiX Toolset
+        run: |
+          # Download and install WiX Toolset v3.14.1
+          $wixUrl = "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip"
+          $wixZip = "$env:TEMP\wix314-binaries.zip"
+          $wixDir = "$env:TEMP\wix314"
+
+          Invoke-WebRequest -Uri $wixUrl -OutFile $wixZip
+          Expand-Archive -Path $wixZip -DestinationPath $wixDir -Force
+
+          # Add WiX to PATH
+          echo "$wixDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install cargo-wix
+        run: cargo install cargo-wix
+
+      - name: Build MSI package
+        run: cargo wix --nocapture --target x86_64-pc-windows-msvc
+
+      - name: Upload MSI package
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-policy-msi
+          path: target/wix/*.msi
+
+      - name: Create ZIP archive (legacy)
         run: |
           mkdir -p dist
           Copy-Item target/x86_64-pc-windows-msvc/release/family-policy.exe dist/
@@ -228,9 +226,8 @@ jobs:
           cp artifacts/family-policy-windows-x86_64/family-policy.exe release-assets/family-policy-windows-x86_64.exe
 
           # Packages
-          cp artifacts/family-policy-deb/*.deb release-assets/ || true
-          cp artifacts/family-policy-rpm/*.rpm release-assets/ || true
           cp artifacts/family-policy-pkg/*.pkg release-assets/ || true
+          cp artifacts/family-policy-msi/*.msi release-assets/ || true
           cp artifacts/family-policy-windows-zip/*.zip release-assets/ || true
 
           # Create checksums
