@@ -54,6 +54,96 @@ pub enum Commands {
     Status,
     /// Show currently applied configuration
     ShowConfig,
+    /// Time limits management
+    TimeLimits {
+        #[command(subcommand)]
+        command: TimeLimitsCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum TimeLimitsCommands {
+    /// Initialize time limits configuration
+    Init {
+        /// Output path for the configuration file
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Overwrite existing file if it exists
+        #[arg(short, long)]
+        force: bool,
+    },
+    /// Add a child profile
+    AddChild {
+        /// Child ID (unique identifier)
+        #[arg(long)]
+        id: String,
+
+        /// Child's name
+        #[arg(long)]
+        name: String,
+
+        /// OS usernames for this child (comma-separated)
+        #[arg(long)]
+        os_users: Option<String>,
+
+        /// Weekday time limit in hours
+        #[arg(long)]
+        weekday_hours: u32,
+
+        /// Weekend time limit in hours
+        #[arg(long)]
+        weekend_hours: u32,
+    },
+    /// Start time tracking service
+    StartTracker {
+        /// Run in foreground (don't daemonize)
+        #[arg(long)]
+        no_daemon: bool,
+    },
+    /// Stop time tracking service
+    StopTracker,
+    /// Show current time limits status
+    StatusTracker,
+    /// Grant time extension (admin)
+    GrantExtension {
+        /// Child ID
+        child_id: String,
+
+        /// Additional minutes to grant
+        minutes: u32,
+
+        /// Admin password
+        #[arg(long)]
+        password: String,
+
+        /// Reason for extension
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Reset a child's time for today (admin)
+    ResetTime {
+        /// Child ID
+        child_id: String,
+
+        /// Admin password
+        #[arg(long)]
+        password: String,
+    },
+    /// Set admin password
+    SetPassword {
+        /// New admin password
+        password: String,
+    },
+    /// Show usage history
+    History {
+        /// Child ID
+        child_id: String,
+
+        /// Number of days to show
+        #[arg(short, long, default_value = "7")]
+        days: u32,
+    },
 }
 
 #[derive(Subcommand, Debug)]

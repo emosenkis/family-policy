@@ -247,3 +247,188 @@ The agent system (`src/agent/`) implements GitHub-based remote policy management
 - **State** (`state.rs`): Tracks ETag, last check time, last update time, and applied policies
 
 The agent validates policies before applying them and maintains a separate state file to track the current applied configuration and GitHub metadata.
+
+## Time Limits Feature (New - 2025-11-16)
+
+The time limits feature enables parents/administrators to set daily computer usage limits for children. The system tracks usage, enforces limits by locking the computer, and supports both individual and shared login scenarios.
+
+### Time Limits Commands
+
+```bash
+# Initialize time limits configuration
+family-policy time-limits init
+family-policy time-limits init --output /path/to/config.yaml
+
+# Add a child profile
+family-policy time-limits add-child \
+  --id alice \
+  --name "Alice" \
+  --os-users alice,alice.smith \
+  --weekday-hours 2 \
+  --weekend-hours 4
+
+# Start time tracking service (requires admin/root)
+sudo family-policy time-limits start-tracker
+
+# Show current status
+family-policy time-limits status-tracker
+
+# Grant time extension (admin)
+family-policy time-limits grant-extension alice 30 \
+  --password admin123 \
+  --reason "Homework project"
+
+# Reset time for today (admin)
+family-policy time-limits reset-time alice --password admin123
+
+# Set admin password
+family-policy time-limits set-password newpassword
+
+# View usage history
+family-policy time-limits history alice --days 7
+```
+
+### Time Limits Architecture
+
+The time limits system (`src/time_limits/`) implements comprehensive screen time management:
+
+- **Config** (`config.rs`): Child profiles, time limits (weekday/weekend/custom), warnings, enforcement settings
+- **State** (`state.rs`): Daily usage tracking, session management, admin overrides, usage history
+- **Tracker** (`tracker.rs`): Background daemon that tracks time in 10-second intervals, manages active sessions
+- **Enforcement** (`enforcement.rs`): Handles warnings, grace periods, and computer locking
+- **Scheduler** (`scheduler.rs`): Calculates time limits based on day of week and custom overrides
+- **Auth** (`auth.rs`): Admin password hashing (Argon2id), verification, rate limiting
+- **Platform** (`platform/`): OS-specific lock mechanisms (Windows, macOS, Linux)
+
+### Key Features
+
+**Dual Login Modes**:
+1. **Individual Login Mode**: Each child has their own OS account. Tracker auto-detects which child is logged in based on `os_users` mapping.
+2. **Shared Login Mode**: Multiple children share one OS account. Children select their identity at startup via GUI.
+
+**Time Tracking**:
+- Tracks in 10-second intervals (configurable in code)
+- Only counts active time (detects idle periods)
+- Resets daily at midnight
+- Persists state across reboots
+
+**Enforcement**:
+- Configurable warnings (default: 15, 5, 1 minutes before limit)
+- Grace period after final warning (default: 60 seconds)
+- Lock actions: lock workstation | logout user | shutdown computer
+- Platform-specific implementations for reliable locking
+
+**Admin Controls**:
+- Grant time extensions with reason tracking
+- Reset daily usage
+- Pause/resume tracking
+- Unlock locked children
+- All admin actions require password and are logged
+
+**Security**:
+- Argon2id password hashing
+- Rate limiting on password attempts
+- Tamper detection (time manipulation, process killing)
+- Self-healing tracker service
+- Admin-only quit (requires password)
+
+### Platform-Specific Locking
+
+**Windows** (`src/time_limits/platform/windows.rs`):
+- Lock: `LockWorkStation()` API
+- Logout: `ExitWindowsEx(EWX_LOGOFF)`
+- Shutdown: `ExitWindowsEx(EWX_SHUTDOWN)`
+
+**macOS** (`src/time_limits/platform/macos.rs`):
+- Lock: osascript with Cmd+Ctrl+Q keystroke
+- Logout: osascript "log out" command
+- Shutdown: osascript "shut down" command
+
+**Linux** (`src/time_limits/platform/linux.rs`):
+- Tries multiple lock methods in order: loginctl, xdg-screensaver, gnome-screensaver, cinnamon-screensaver, mate-screensaver, xscreensaver, light-locker, i3lock, slock
+- Logout: loginctl, gnome-session-quit, qdbus (KDE), xfce4-session-logout
+- Shutdown: systemctl, shutdown, poweroff
+
+### State File Locations
+
+**Time Limits Config**:
+- Linux: `/etc/family-policy/time-limits-config.yaml`
+- macOS: `/Library/Application Support/family-policy/time-limits-config.yaml`
+- Windows: `C:\ProgramData\family-policy\time-limits-config.yaml`
+
+**Time Limits State** (daily usage):
+- Linux: `/var/lib/family-policy/time-limits-state.json`
+- macOS: `/Library/Application Support/family-policy/time-limits-state.json`
+- Windows: `C:\ProgramData\family-policy\time-limits-state.json`
+
+**Time Limits History** (90-day retention):
+- Linux: `/var/lib/family-policy/time-limits-history.json`
+- macOS: `/Library/Application Support/family-policy/time-limits-history.json`
+- Windows: `C:\ProgramData\family-policy\time-limits-history.json`
+
+### Configuration Format
+
+Example time limits configuration:
+
+```yaml
+admin:
+  password_hash: "$argon2id$v=19$..."  # Use 'set-password' command
+  admin_accounts:
+    - "admin"
+    - "parent"
+
+children:
+  - id: "alice"
+    name: "Alice"
+    os_users: ["alice"]  # Empty for shared login mode
+    limits:
+      weekday:
+        hours: 2
+        minutes: 0
+      weekend:
+        hours: 4
+        minutes: 0
+      custom:  # Optional overrides
+        - days: ["wednesday"]
+          hours: 1
+          minutes: 30
+    warnings: [15, 5, 1]  # Minutes before lockout
+    grace_period: 60  # Seconds after final warning
+
+shared_login:
+  enabled: false  # Set to true for shared login mode
+  shared_accounts: ["family", "kids"]
+  require_selection: true
+  allow_switching: false
+
+enforcement:
+  action: lock  # lock | logout | shutdown
+  prevent_time_manipulation: true
+  require_admin_to_quit: true
+  self_protection: true
+```
+
+See `example-time-limits-config.yaml` for comprehensive documentation.
+
+### Implementation Notes
+
+**Tokio async runtime**: The tracker runs as an async task using Tokio. Commands that interact with the tracker use `#[tokio::main]` wrapper.
+
+**State management**: The state file tracks per-child usage and is updated every 10 seconds. Daily reset happens automatically at midnight (detected via date comparison).
+
+**Warning system**: Warnings are shown as system notifications (platform-specific). Each warning is shown only once per day per threshold.
+
+**Admin overrides**: Time extensions and resets are recorded in `admin_overrides` array with timestamp, grantor, and reason. Extensions add to the daily limit for that day only.
+
+**Borrow checker**: State access requires careful borrow management. The tracker uses Arc<Mutex<>> for shared mutable state across async tasks.
+
+**Testing**: Most time limits tests are unit tests. Integration tests for locking mechanisms should be run manually or in VMs (to avoid locking the development machine).
+
+### Future Enhancements (Not Yet Implemented)
+
+- **Tauri v2 GUI**: Interactive dashboard for configuration, monitoring, and admin overrides (PRD created, implementation pending)
+- **Service installation**: Auto-start on boot via systemd/LaunchAgent/Task Scheduler
+- **Remote monitoring**: Web-based parent dashboard
+- **App-specific limits**: Track time per application
+- **Bedtime enforcement**: Separate from daily limits
+- **Reward system**: Bonus time for good behavior

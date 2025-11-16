@@ -1,0 +1,169 @@
+# Time Limits Configuration Example
+#
+# This file configures time limits for children's computer usage.
+# The family-policy tool will track usage and enforce limits by locking
+# the computer when time expires.
+
+# Admin configuration
+admin:
+  # Password hash (use 'family-policy time-limits set-password' to set)
+  # Default password is "admin" - CHANGE THIS!
+  password_hash: "$argon2id$v=19$m=19456,t=2,p=1$YourSaltHere$YourHashHere"
+
+  # OS user accounts that are exempt from time limits
+  admin_accounts:
+    - "admin"
+    - "parent"
+    - "mom"
+    - "dad"
+
+# Children profiles
+children:
+  # Example child 1 - Individual login mode
+  - id: "alice"
+    name: "Alice"
+
+    # OS usernames that map to this child
+    # Leave empty if using shared login mode (see below)
+    os_users:
+      - "alice"
+      - "alice.smith"
+
+    # Time limits
+    limits:
+      # Weekday limit (Monday-Friday)
+      weekday:
+        hours: 2
+        minutes: 0
+
+      # Weekend limit (Saturday-Sunday)
+      weekend:
+        hours: 4
+        minutes: 0
+
+      # Optional: Custom day overrides
+      custom:
+        # Less time on Wednesdays (has after-school activities)
+        - days: ["wednesday"]
+          hours: 1
+          minutes: 30
+
+        # More time on Fridays
+        - days: ["friday"]
+          hours: 3
+          minutes: 0
+
+    # Warning thresholds (minutes before lockout)
+    # Default: [15, 5, 1]
+    warnings: [15, 5, 1]
+
+    # Grace period after final warning (seconds)
+    # Default: 60
+    grace_period: 60
+
+  # Example child 2 - Different limits
+  - id: "bob"
+    name: "Bob"
+    os_users:
+      - "bob"
+    limits:
+      weekday:
+        hours: 1
+        minutes: 30
+      weekend:
+        hours: 3
+        minutes: 0
+    warnings: [10, 5, 1]
+    grace_period: 30
+
+# Shared login mode (when multiple kids share one OS account)
+shared_login:
+  # Enable shared login mode
+  # When enabled, children must select their identity at startup
+  # Set to true if your kids share a computer account
+  enabled: false
+
+  # OS accounts that are shared among children
+  # Only used when shared_login.enabled = true
+  shared_accounts:
+    - "family"
+    - "kids"
+
+  # Require kid selection at startup
+  # When true, the app will show a kid selector dialog
+  require_selection: true
+
+  # Allow switching kids during session
+  # When false, requires admin password to switch
+  allow_switching: false
+
+  # Auto-select if only one kid has time remaining
+  # When true, automatically selects the only available child
+  auto_select_if_unique: true
+
+# Enforcement settings
+enforcement:
+  # Action when time expires: lock | logout | shutdown
+  # - lock: Lock the workstation (recommended)
+  # - logout: Log out the current user
+  # - shutdown: Shutdown the computer (use with caution)
+  action: lock
+
+  # Block system time changes while app is running
+  # Prevents kids from changing the clock to bypass limits
+  prevent_time_manipulation: true
+
+  # Require admin password to close/disable tracker
+  # Prevents kids from simply closing the app
+  require_admin_to_quit: true
+
+  # Monitor for process tampering and auto-restart
+  # Makes the tracker more resilient to tampering
+  self_protection: true
+
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+#
+# Individual Login Mode (each child has their own OS account):
+#   - Set shared_login.enabled to false
+#   - Specify os_users for each child
+#   - The app will auto-detect which child is logged in
+#
+# Shared Login Mode (multiple kids share one OS account):
+#   - Set shared_login.enabled to true
+#   - Leave os_users empty for all children
+#   - Specify shared_accounts (the OS accounts kids share)
+#   - Kids will select their identity at startup
+#
+# =============================================================================
+# IMPORTANT NOTES
+# =============================================================================
+#
+# 1. Admin Password:
+#    - Use 'family-policy time-limits set-password <password>' to set password
+#    - The password is hashed using Argon2id for security
+#    - Never share your admin password with children
+#
+# 2. Time Tracking:
+#    - Time is tracked in 10-second intervals
+#    - Only active time is counted (detects idle periods)
+#    - Time resets at midnight each day
+#
+# 3. Warnings:
+#    - Warnings are shown as system notifications
+#    - Final warning includes a grace period countdown
+#    - Configure grace_period to give children time to save work
+#
+# 4. Admin Overrides:
+#    - Use 'family-policy time-limits grant-extension' to add time
+#    - Use 'family-policy time-limits reset-time' to reset daily usage
+#    - All overrides are logged for accountability
+#
+# 5. Platform Support:
+#    - Windows: Uses LockWorkStation API
+#    - macOS: Uses osascript to trigger lock screen
+#    - Linux: Tries multiple lock methods (loginctl, gnome-screensaver, etc.)
+#
+# =============================================================================
