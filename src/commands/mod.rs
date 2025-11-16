@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod config;
 pub mod local;
 pub mod utils;
 

@@ -1,0 +1,156 @@
+# Family Policy Configuration
+#
+# This file defines browser extension policies and privacy controls that can be
+# applied to Chrome, Firefox, and Edge browsers across Windows, macOS, and Linux.
+#
+# Documentation: https://github.com/emosenkis/family-policy
+
+# Policies are processed in order and can target multiple browsers
+policies:
+  # ============================================================================
+  # Example 1: Privacy Controls
+  # ============================================================================
+  # Disable private/incognito browsing modes across all browsers
+  - name: Disable Private Browsing
+    browsers:
+      - chrome    # Google Chrome
+      - firefox   # Mozilla Firefox
+      - edge      # Microsoft Edge
+
+    # Disable incognito mode (Chrome), private browsing (Firefox), InPrivate (Edge)
+    disable_private_mode: true
+
+    # Disable guest mode (Chrome and Edge only - ignored for Firefox)
+    disable_guest_mode: true
+
+  # ============================================================================
+  # Example 2: Simple Extension Installation
+  # ============================================================================
+  # Install an extension with the same ID across all browsers
+  - name: Example Extension (Same ID)
+    browsers:
+      - chrome
+      - edge
+    extensions:
+      - name: Example Extension
+        # Use a single ID when the extension has the same ID across browsers
+        id: abcdefghijklmnopqrstuvwxyz123456
+        force_installed: true
+
+  # ============================================================================
+  # Example 3: Browser-Specific Extension IDs
+  # ============================================================================
+  # Install uBlock Origin Lite with different IDs per browser
+  - name: uBlock Origin Lite
+    browsers:
+      - chrome
+      - firefox
+      - edge
+    extensions:
+      - name: uBlock Origin Lite
+        # Use browser-specific IDs when extensions have different IDs
+        id:
+          chrome: ddkjiahejlhfcafbddmgiahcphecmpfh
+          firefox: uBOLite@raymondhill.net
+          edge: ddkjiahejlhfcafbddmgiahcphecmpfh
+        force_installed: true
+
+        # Extension-specific settings (optional)
+        # These are passed directly to the extension and vary by extension
+        # See extension documentation for available settings
+        settings:
+          # uBO Lite specific settings
+          # See: https://github.com/uBlockOrigin/uBOL-home/wiki/Managed-settings
+          rulesets:
+            - "+default"      # Enable default blocking rules
+            - "+annoyances"   # Block annoyances (cookie notices, etc.)
+          strictBlockMode: true
+          defaultFiltering: optimal
+          disableFirstRunPage: true
+
+  # ============================================================================
+  # Example 4: Multiple Extensions in One Policy
+  # ============================================================================
+  - name: Security Extensions
+    browsers:
+      - chrome
+    extensions:
+      # First extension
+      - name: HTTPS Everywhere
+        id:
+          chrome: gcbommkclmclpchllfjekcdonpmejbdp
+        force_installed: true
+
+      # Second extension
+      - name: Privacy Badger
+        id:
+          chrome: pkehgijcmpdhfbdbbnkijodmdjhbjlgp
+        force_installed: true
+
+# ============================================================================
+# Finding Extension IDs
+# ============================================================================
+#
+# Chrome/Edge:
+#   1. Visit the Chrome Web Store page for the extension
+#   2. The ID is the 32-character string in the URL
+#   3. Example: https://chrome.google.com/webstore/detail/EXTENSION-NAME/ID-HERE
+#
+# Firefox:
+#   1. Visit about:support in Firefox
+#   2. Look for the extension in the Extensions section
+#   3. The ID is usually in email format: extension@developer.com
+#   4. Or visit about:debugging#/runtime/this-firefox
+#
+# ============================================================================
+# Extension Settings
+# ============================================================================
+#
+# The 'settings' field accepts arbitrary JSON that is passed to the extension.
+# Settings are extension-specific - consult each extension's documentation:
+#
+# - uBlock Origin Lite: https://github.com/uBlockOrigin/uBOL-home/wiki/Managed-settings
+# - Other extensions: Check extension documentation or source code
+#
+# Example settings structure:
+#   settings:
+#     stringValue: "text"
+#     numberValue: 42
+#     booleanValue: true
+#     arrayValue:
+#       - item1
+#       - item2
+#     objectValue:
+#       nestedKey: nestedValue
+#
+# ============================================================================
+# Platform-Specific Behavior
+# ============================================================================
+#
+# The tool automatically handles platform differences:
+#
+# Windows:
+#   - Chrome/Edge: Windows Registry (HKLM\SOFTWARE\Policies\...)
+#   - Firefox: policies.json in Firefox installation directory
+#
+# macOS:
+#   - Chrome/Edge: /Library/Managed Preferences/*.plist
+#   - Firefox: policies.json in Firefox.app/Contents/Resources/distribution/
+#
+# Linux:
+#   - Chrome/Edge: JSON files in /etc/opt/chrome|edge/policies/managed/
+#   - Firefox: policies.json in /etc/firefox/policies/
+#
+# ============================================================================
+# Testing Your Configuration
+# ============================================================================
+#
+# Preview changes without applying:
+#   family-policy --config family-policy.yaml --dry-run
+#
+# Apply configuration:
+#   sudo family-policy --config family-policy.yaml
+#
+# Remove all applied policies:
+#   sudo family-policy --uninstall
+#

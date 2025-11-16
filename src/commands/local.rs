@@ -106,13 +106,15 @@ fn install_policies(args: &LocalArgs) -> Result<()> {
     }
 
     // Apply policies
-    println!("Applying browser policies...");
-    println!();
+    if !args.dry_run {
+        println!("Applying browser policies...");
+        println!();
+    }
+
+    let applied_policies = policy::apply_policies(&config, current_state.as_ref(), args.dry_run)
+        .context("Failed to apply policies")?;
 
     if !args.dry_run {
-        let applied_policies = policy::apply_policies(&config, current_state.as_ref())
-            .context("Failed to apply policies")?;
-
         // Create new state
         let new_state = state::create_state(&config, applied_policies)
             .context("Failed to create state")?;
@@ -123,18 +125,6 @@ fn install_policies(args: &LocalArgs) -> Result<()> {
         println!();
         println!("✓ All policies applied successfully");
         println!("  State saved to: {}", state::get_state_path()?.display());
-    } else {
-        // Dry run: just show what would be done
-        let (chrome, firefox, edge) = config::to_browser_configs(&config);
-        if chrome.is_some() {
-            println!("[DRY RUN] Would apply Chrome policies");
-        }
-        if firefox.is_some() {
-            println!("[DRY RUN] Would apply Firefox policies");
-        }
-        if edge.is_some() {
-            println!("[DRY RUN] Would apply Edge policies");
-        }
     }
 
     println!();

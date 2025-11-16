@@ -1,1 +1,5 @@
 /target
+
+# User's config file (use example-config.yaml as template)
+/family-policy.yaml
+/browser-policy.yaml

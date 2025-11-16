@@ -163,6 +163,76 @@ pub fn read_registry_policy(key_path: &str) -> Result<Vec<String>> {
     }
 }
 
+/// Apply registry policy with dry-run support
+/// Shows diff in dry-run mode, actually writes in normal mode
+#[cfg(target_os = "windows")]
+pub fn apply_registry_policy_with_preview(
+    key_path: &str,
+    values: Vec<String>,
+    dry_run: bool,
+) -> Result<()> {
+    if dry_run {
+        println!("Registry Key: HKLM\\{}", key_path);
+        let current_values = read_registry_policy(key_path).unwrap_or_default();
+
+        if current_values.is_empty() && !values.is_empty() {
+            println!("  Action: CREATE new policy");
+            for (i, ext) in values.iter().enumerate() {
+                println!("  + [{}] {}", i + 1, ext);
+            }
+        } else if current_values != values {
+            println!("  Action: UPDATE policy");
+            for (i, value) in current_values.iter().enumerate() {
+                if !values.contains(value) {
+                    println!("  - [{}] {}", i + 1, value);
+                }
+            }
+            for (i, value) in values.iter().enumerate() {
+                if !current_values.contains(value) {
+                    println!("  + [{}] {}", i + 1, value);
+                } else if current_values.get(i) == Some(value) {
+                    println!("    [{}] {}", i + 1, value);
+                }
+            }
+        } else {
+            println!("  Action: No changes needed");
+        }
+        println!();
+        Ok(())
+    } else {
+        write_registry_policy(key_path, values)
+    }
+}
+
+/// Apply registry value with dry-run support
+/// Shows value in dry-run mode, actually writes in normal mode
+#[cfg(target_os = "windows")]
+pub fn apply_registry_value_with_preview(
+    key_path: &str,
+    value_name: &str,
+    value: RegistryValue,
+    dry_run: bool,
+) -> Result<()> {
+    if dry_run {
+        println!("Registry Value: HKLM\\{}\\{}", key_path, value_name);
+        println!("  Action: SET value");
+        match &value {
+            RegistryValue::Dword(val) => {
+                println!("  + Type: DWORD");
+                println!("  + Value: {}", val);
+            }
+            RegistryValue::String(val) => {
+                println!("  + Type: String");
+                println!("  + Value: {}", val);
+            }
+        }
+        println!();
+        Ok(())
+    } else {
+        write_registry_value(key_path, value_name, value)
+    }
+}
+
 #[cfg(test)]
 #[cfg(target_os = "windows")]
 mod tests {

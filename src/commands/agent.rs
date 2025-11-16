@@ -1,91 +1,9 @@
 use anyhow::{Context, Result};
 
 use crate::agent;
-use crate::config;
 use crate::platform;
 
 use super::utils::{format_duration, init_logging, print_sudo_message};
-
-/// Setup agent configuration
-pub fn setup(url: String, token: Option<String>, poll_interval: u64, verbose: bool) -> Result<()> {
-    // Initialize logging
-    init_logging(verbose);
-    // Check for admin privileges
-    if let Err(e) = platform::ensure_admin_privileges() {
-        eprintln!("Insufficient privileges: {:#}", e);
-        print_sudo_message();
-        std::process::exit(1);
-    }
-
-    println!("Browser Extension Policy Manager - Agent Setup");
-    println!("Version: {}", env!("CARGO_PKG_VERSION"));
-    println!();
-
-    // Create configuration
-    let config = agent::AgentConfig {
-        github: agent::GitHubConfig {
-            policy_url: url.clone(),
-            access_token: token,
-        },
-        agent: agent::AgentSettings {
-            poll_interval,
-            poll_jitter: 60,
-            retry_interval: 60,
-            max_retries: 3,
-        },
-        logging: agent::LoggingConfig {
-            level: "info".to_string(),
-            file: None,
-        },
-        security: agent::SecurityConfig::default(),
-    };
-
-    // Validate configuration
-    config.validate().context("Invalid configuration")?;
-
-    println!("Testing connection to GitHub...");
-
-    // Test connection synchronously
-    let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(async {
-        let poller = agent::GitHubPoller::new(config.github.clone())?;
-        match poller.fetch_policy(None).await {
-            Ok(result) => {
-                match result {
-                    agent::PolicyFetchResult::Updated { content, .. } => {
-                        // Parse to validate
-                        let _policy: config::Config = serde_yaml::from_str(&content)
-                            .context("Policy file is not valid YAML")?;
-                        println!("✓ Policy file found and valid");
-                    }
-                    agent::PolicyFetchResult::NotModified => {
-                        println!("✓ Policy file found");
-                    }
-                }
-                Ok::<(), anyhow::Error>(())
-            }
-            Err(e) => {
-                Err(e).context("Failed to fetch policy from GitHub")
-            }
-        }
-    })?;
-
-    // Save configuration
-    let config_path = agent::get_agent_config_path()?;
-    config.save(&config_path)?;
-    println!("✓ Configuration saved to: {}", config_path.display());
-
-    println!();
-    println!("Agent configured successfully!");
-    println!();
-    println!("Next steps:");
-    println!("  1. Start the agent:");
-    println!("     sudo family-policy start");
-    println!();
-    println!("The agent will check for policy updates every {} seconds.", poll_interval);
-
-    Ok(())
-}
 
 /// Install agent as a system service
 pub fn install_service(verbose: bool) -> Result<()> {

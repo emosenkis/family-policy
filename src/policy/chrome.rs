@@ -30,11 +30,11 @@ fn get_chrome_policy_dir() -> &'static Path {
 }
 
 /// Apply Chrome policies (extensions and privacy controls)
-pub fn apply_chrome_policies(config: &ChromeConfig) -> Result<BrowserState> {
+pub fn apply_chrome_policies(config: &ChromeConfig, dry_run: bool) -> Result<BrowserState> {
     let chromium_config = ChromiumConfig::from_chrome(config);
     let browser_config = get_chrome_browser_config();
 
-    chromium_common::apply_chromium_policies(&chromium_config, &browser_config)
+    chromium_common::apply_chromium_policies(&chromium_config, &browser_config, dry_run)
 }
 
 /// Remove all Chrome policies

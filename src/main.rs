@@ -10,7 +10,7 @@ mod platform;
 mod policy;
 mod state;
 
-use cli::{Args, Commands};
+use cli::{Args, Commands, ConfigCommands};
 
 fn main() {
     if let Err(e) = run() {
@@ -25,8 +25,12 @@ fn run() -> Result<()> {
     // Handle subcommands
     if let Some(command) = args.command {
         return match command {
-            Commands::Setup { url, token, poll_interval } => {
-                commands::agent::setup(url, token, poll_interval, args.verbose)
+            Commands::Config { command } => {
+                match command {
+                    ConfigCommands::Init { output, force } => {
+                        commands::config::init(output, force, args.verbose)
+                    }
+                }
             }
             Commands::InstallService => {
                 commands::agent::install_service(args.verbose)

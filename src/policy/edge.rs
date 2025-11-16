@@ -30,11 +30,11 @@ fn get_edge_policy_dir() -> &'static Path {
 }
 
 /// Apply Edge policies (extensions and privacy controls)
-pub fn apply_edge_policies(config: &EdgeConfig) -> Result<BrowserState> {
+pub fn apply_edge_policies(config: &EdgeConfig, dry_run: bool) -> Result<BrowserState> {
     let chromium_config = ChromiumConfig::from_edge(config);
     let browser_config = get_edge_browser_config();
 
-    chromium_common::apply_chromium_policies(&chromium_config, &browser_config)
+    chromium_common::apply_chromium_policies(&chromium_config, &browser_config, dry_run)
 }
 
 /// Remove all Edge policies

@@ -129,6 +129,89 @@ pub fn set_permissions_readable_all(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Apply JSON file with dry-run support (platform-independent)
+/// Shows diff in dry-run mode, actually writes in normal mode
+pub fn apply_json_file_with_preview(
+    file_path: &Path,
+    data: serde_json::Value,
+    dry_run: bool,
+) -> Result<()> {
+    if dry_run {
+        println!("JSON File: {}", file_path.display());
+
+        // Try to read existing file
+        let existing_data = if file_path.exists() {
+            std::fs::read_to_string(file_path)
+                .ok()
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        } else {
+            None
+        };
+
+        if existing_data.is_none() {
+            println!("  Action: CREATE new file");
+            println!();
+            println!("  New content:");
+            let formatted = serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".to_string());
+            for line in formatted.lines() {
+                println!("  + {}", line);
+            }
+        } else if let Some(existing) = existing_data {
+            if existing == data {
+                println!("  Action: No changes needed");
+            } else {
+                println!("  Action: UPDATE file");
+                println!();
+                println!("  Diff:");
+
+                // Show a simple diff
+                let old_formatted = serde_json::to_string_pretty(&existing).unwrap_or_else(|_| "{}".to_string());
+                let new_formatted = serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".to_string());
+
+                let old_lines: Vec<&str> = old_formatted.lines().collect();
+                let new_lines: Vec<&str> = new_formatted.lines().collect();
+
+                for (i, new_line) in new_lines.iter().enumerate() {
+                    if i < old_lines.len() {
+                        let old_line = old_lines[i];
+                        if old_line != *new_line {
+                            println!("  - {}", old_line);
+                            println!("  + {}", new_line);
+                        } else {
+                            println!("    {}", new_line);
+                        }
+                    } else {
+                        println!("  + {}", new_line);
+                    }
+                }
+
+                // Show removed lines if new is shorter
+                for old_line in old_lines.iter().skip(new_lines.len()) {
+                    println!("  - {}", old_line);
+                }
+            }
+        }
+        println!();
+        Ok(())
+    } else {
+        // Ensure parent directory exists
+        if let Some(parent) = file_path.parent() {
+            ensure_directory_exists(parent)?;
+        }
+
+        // Write JSON file
+        let content = serde_json::to_string_pretty(&data)
+            .context("Failed to serialize JSON")?;
+
+        atomic_write(file_path, content.as_bytes())
+            .with_context(|| format!("Failed to write file: {}", file_path.display()))?;
+
+        set_permissions_readable_all(file_path)?;
+
+        Ok(())
+    }
+}
+
 /// Check if running with administrator/root privileges
 pub fn ensure_admin_privileges() -> Result<()> {
     #[cfg(unix)]

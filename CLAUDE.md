@@ -43,17 +43,50 @@ family-policy --dry-run --config browser-policy.yaml
 sudo family-policy --uninstall
 ```
 
+## Getting Started
+
+### Create an Example Configuration
+
+Generate a well-documented example configuration file to get started:
+
+```bash
+# Create config in current directory
+family-policy config init
+
+# Specify custom output path
+family-policy config init --output /path/to/config.yaml
+
+# Overwrite existing file
+family-policy config init --force
+```
+
+The generated config file includes:
+- Comprehensive documentation and examples
+- Privacy controls (disable private/incognito browsing)
+- Extension installation examples (single and multi-browser)
+- Extension settings examples
+- Platform-specific behavior documentation
+
+### Apply Your Configuration
+
+Once you've customized your config file:
+
+```bash
+# Preview changes without applying
+family-policy --config family-policy.yaml --dry-run
+
+# Apply the configuration
+sudo family-policy --config family-policy.yaml
+
+# Remove all applied policies
+sudo family-policy --uninstall
+```
+
 ## Agent Mode Commands
 
 The agent mode enables remote policy management via GitHub polling:
 
 ```bash
-# Setup agent with GitHub policy URL
-sudo family-policy setup \
-  --url https://raw.githubusercontent.com/user/repo/main/policy.yaml \
-  --token <github-token> \
-  --poll-interval 300
-
 # Start agent daemon (foreground mode)
 sudo family-policy start --no-daemon
 
@@ -66,6 +99,8 @@ family-policy status
 # Show currently applied configuration
 family-policy show-config
 ```
+
+Note: Agent mode configuration is managed through the agent config file (not via CLI setup command).
 
 ## Architecture
 
