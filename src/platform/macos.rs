@@ -160,6 +160,85 @@ pub fn bool_to_plist(val: bool) -> Value {
     Value::Boolean(val)
 }
 
+/// Apply plist policy with dry-run support
+/// Shows what would change in dry-run mode, actually writes in normal mode
+#[cfg(target_os = "macos")]
+pub fn apply_plist_policy_with_preview(
+    bundle_id: &str,
+    updates: HashMap<String, Value>,
+    dry_run: bool,
+) -> Result<()> {
+    if dry_run {
+        let plist_path = format!("/Library/Managed Preferences/{}.plist", bundle_id);
+        println!("Plist File: {}", plist_path);
+
+        // Try to read existing plist
+        let existing_plist = if std::path::Path::new(&plist_path).exists() {
+            std::fs::File::open(&plist_path)
+                .ok()
+                .and_then(|f| plist::from_reader::<_, plist::Value>(f).ok())
+                .and_then(|v| if let plist::Value::Dictionary(d) = v { Some(d) } else { None })
+        } else {
+            None
+        };
+
+        if existing_plist.is_none() {
+            println!("  Action: CREATE new plist file");
+        } else {
+            println!("  Action: UPDATE plist file");
+        }
+        println!();
+
+        // Show each key being added/updated
+        for (key, value) in &updates {
+            println!("  Key: {}", key);
+            if let Some(ref dict) = existing_plist {
+                if dict.contains_key(key) {
+                    println!("    Action: UPDATE");
+                } else {
+                    println!("    Action: ADD");
+                }
+            } else {
+                println!("    Action: ADD");
+            }
+
+            // Show type and value
+            match value {
+                Value::Array(_) => {
+                    println!("    + Type: Array");
+                    if let Value::Array(arr) = value {
+                        for item in arr {
+                            if let Value::String(s) = item {
+                                println!("      + {}", s);
+                            }
+                        }
+                    }
+                }
+                Value::Integer(i) => {
+                    println!("    + Type: Integer");
+                    println!("    + Value: {}", i);
+                }
+                Value::Boolean(b) => {
+                    println!("    + Type: Boolean");
+                    println!("    + Value: {}", b);
+                }
+                Value::String(s) => {
+                    println!("    + Type: String");
+                    println!("    + Value: {}", s);
+                }
+                _ => {
+                    println!("    + Type: Other");
+                }
+            }
+            println!();
+        }
+
+        Ok(())
+    } else {
+        write_plist_policy(bundle_id, updates)
+    }
+}
+
 #[cfg(test)]
 #[cfg(target_os = "macos")]
 mod tests {

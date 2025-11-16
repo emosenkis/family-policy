@@ -312,6 +312,11 @@ fn generate_firefox_install_url(id: &str) -> String {
     format!("{}/{}/latest.xpi", FIREFOX_ADDONS_BASE, id)
 }
 
+/// Example configuration file with comprehensive documentation
+///
+/// The content is loaded from example-config.yaml at compile time
+pub const EXAMPLE_CONFIG: &str = include_str!("../example-config.yaml");
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -6,25 +6,15 @@ use crate::config::FirefoxConfig;
 use crate::state::BrowserState;
 
 /// Apply Firefox policies (extensions and privacy controls)
-pub fn apply_firefox_policies(config: &FirefoxConfig) -> Result<BrowserState> {
+pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<BrowserState> {
     let policy_path = get_firefox_policy_path()?;
 
     // Create policies.json content
     let policies_json = create_firefox_policies_json(config)?;
 
-    // Ensure parent directory exists
-    if let Some(parent) = policy_path.parent() {
-        crate::platform::common::ensure_directory_exists(parent)?;
-    }
-
-    // Write policies.json
-    let content = serde_json::to_string_pretty(&policies_json)
-        .context("Failed to serialize Firefox policies")?;
-
-    crate::platform::common::atomic_write(&policy_path, content.as_bytes())
-        .with_context(|| format!("Failed to write Firefox policies: {}", policy_path.display()))?;
-
-    crate::platform::common::set_permissions_readable_all(&policy_path)?;
+    // Use common JSON file helper
+    crate::platform::common::apply_json_file_with_preview(&policy_path, policies_json, dry_run)
+        .with_context(|| format!("Failed to apply Firefox policies: {}", policy_path.display()))?;
 
     // Build and return state
     let mut state = BrowserState::new();

@@ -55,19 +55,20 @@ impl ChromiumConfig {
 pub fn apply_chromium_policies(
     config: &ChromiumConfig,
     browser_config: &ChromiumBrowserConfig,
+    dry_run: bool,
 ) -> Result<BrowserState> {
     let platform = crate::browser::current_platform();
 
     // Apply platform-specific policies
     match platform {
         crate::browser::Platform::Windows => {
-            apply_chromium_windows(config, browser_config)?
+            apply_chromium_windows(config, browser_config, dry_run)?
         }
         crate::browser::Platform::MacOS => {
-            apply_chromium_macos(config, browser_config)?
+            apply_chromium_macos(config, browser_config, dry_run)?
         }
         crate::browser::Platform::Linux => {
-            apply_chromium_linux(config, browser_config)?
+            apply_chromium_linux(config, browser_config, dry_run)?
         }
     }
 
@@ -120,8 +121,9 @@ pub fn format_chromium_extension_entry(ext: &Extension) -> String {
 fn apply_chromium_windows(
     config: &ChromiumConfig,
     browser_config: &ChromiumBrowserConfig,
+    dry_run: bool,
 ) -> Result<()> {
-    use crate::platform::windows::{write_registry_policy, write_registry_value, RegistryValue};
+    use crate::platform::windows::{apply_registry_policy_with_preview, apply_registry_value_with_preview, RegistryValue};
 
     tracing::debug!(
         "Applying {} policies on Windows (registry key: {})",
@@ -138,10 +140,10 @@ fn apply_chromium_windows(
             .map(format_chromium_extension_entry)
             .collect();
 
-        write_registry_policy(&extension_key, extension_strings)
+        apply_registry_policy_with_preview(&extension_key, extension_strings, dry_run)
             .with_context(|| {
                 format!(
-                    "Failed to write {} extension policy to registry at {}",
+                    "Failed to apply {} extension policy to registry at {}",
                     browser_config.browser_name, extension_key
                 )
             })?;
@@ -156,14 +158,15 @@ fn apply_chromium_windows(
                 "InPrivateModeAvailability"
             };
 
-            write_registry_value(
+            apply_registry_value_with_preview(
                 browser_config.registry_key,
                 key_name,
                 RegistryValue::Dword(1), // 1 = Disabled
+                dry_run,
             )
             .with_context(|| {
                 format!(
-                    "Failed to write {} to registry",
+                    "Failed to apply {} to registry",
                     key_name
                 )
             })?;
@@ -172,14 +175,15 @@ fn apply_chromium_windows(
 
     // Apply guest mode control
     if let Some(disable_guest_mode) = config.disable_guest_mode {
-        write_registry_value(
+        apply_registry_value_with_preview(
             browser_config.registry_key,
             "BrowserGuestModeEnabled",
             RegistryValue::Dword(if disable_guest_mode { 0 } else { 1 }),
+            dry_run,
         )
         .with_context(|| {
             format!(
-                "Failed to write BrowserGuestModeEnabled to {} registry",
+                "Failed to apply BrowserGuestModeEnabled to {} registry",
                 browser_config.browser_name
             )
         })?;
@@ -193,9 +197,10 @@ fn apply_chromium_windows(
 fn apply_chromium_macos(
     config: &ChromiumConfig,
     browser_config: &ChromiumBrowserConfig,
+    dry_run: bool,
 ) -> Result<()> {
     use crate::platform::macos::{
-        bool_to_plist, integer_to_plist, string_vec_to_plist_array, write_plist_policy,
+        apply_plist_policy_with_preview, bool_to_plist, integer_to_plist, string_vec_to_plist_array,
     };
     use std::collections::HashMap;
 
@@ -245,10 +250,10 @@ fn apply_chromium_macos(
         );
     }
 
-    write_plist_policy(browser_config.bundle_id, updates)
+    apply_plist_policy_with_preview(browser_config.bundle_id, updates, dry_run)
         .with_context(|| {
             format!(
-                "Failed to write {} plist policy",
+                "Failed to apply {} plist policy",
                 browser_config.browser_name
             )
         })?;
@@ -261,10 +266,12 @@ fn apply_chromium_macos(
 fn apply_chromium_linux(
     config: &ChromiumConfig,
     browser_config: &ChromiumBrowserConfig,
+    dry_run: bool,
 ) -> Result<()> {
-    use crate::platform::linux::write_json_policy;
+    use crate::platform::common::apply_json_file_with_preview;
 
     let policy_dir = (browser_config.policy_dir_fn)();
+    let policy_file = policy_dir.join("browser-policy.json");
 
     tracing::debug!(
         "Applying {} policies on Linux (dir: {})",
@@ -303,10 +310,10 @@ fn apply_chromium_linux(
         policy["BrowserGuestModeEnabled"] = json!(!disable_guest_mode);
     }
 
-    write_json_policy(policy_dir, "browser-policy", policy)
+    apply_json_file_with_preview(&policy_file, policy, dry_run)
         .with_context(|| {
             format!(
-                "Failed to write {} JSON policy",
+                "Failed to apply {} JSON policy",
                 browser_config.browser_name
             )
         })?;
@@ -423,6 +430,7 @@ fn remove_chromium_linux(browser_config: &ChromiumBrowserConfig) -> Result<()> {
 fn apply_chromium_windows(
     _config: &ChromiumConfig,
     _browser_config: &ChromiumBrowserConfig,
+    _dry_run: bool,
 ) -> Result<()> {
     anyhow::bail!("Windows platform not supported in this build")
 }
@@ -431,6 +439,7 @@ fn apply_chromium_windows(
 fn apply_chromium_macos(
     _config: &ChromiumConfig,
     _browser_config: &ChromiumBrowserConfig,
+    _dry_run: bool,
 ) -> Result<()> {
     anyhow::bail!("macOS platform not supported in this build")
 }
@@ -439,6 +448,7 @@ fn apply_chromium_macos(
 fn apply_chromium_linux(
     _config: &ChromiumConfig,
     _browser_config: &ChromiumBrowserConfig,
+    _dry_run: bool,
 ) -> Result<()> {
     anyhow::bail!("Linux platform not supported in this build")
 }

@@ -142,21 +142,21 @@ fn apply_policy_config(config: &config::Config) -> Result<AppliedPolicies> {
     // Apply Chrome policies
     if let Some(chrome) = chrome_config {
         tracing::info!("Applying Chrome policies...");
-        let state = policy::chrome::apply_chrome_policies(&chrome)?;
+        let state = policy::chrome::apply_chrome_policies(&chrome, false)?;
         applied.chrome = Some(state);
     }
 
     // Apply Firefox policies
     if let Some(firefox) = firefox_config {
         tracing::info!("Applying Firefox policies...");
-        let state = policy::firefox::apply_firefox_policies(&firefox)?;
+        let state = policy::firefox::apply_firefox_policies(&firefox, false)?;
         applied.firefox = Some(state);
     }
 
     // Apply Edge policies
     if let Some(edge) = edge_config {
         tracing::info!("Applying Edge policies...");
-        let state = policy::edge::apply_edge_policies(&edge)?;
+        let state = policy::edge::apply_edge_policies(&edge, false)?;
         applied.edge = Some(state);
     }
 

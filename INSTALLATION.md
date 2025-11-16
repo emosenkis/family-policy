@@ -11,16 +11,16 @@ This guide covers installation methods for all supported platforms.
 sudo dpkg -i family-policy_0.1.0_amd64.deb
 
 # Configure the agent
-sudo family-policy agent setup \
+sudo family-policy setup \
   --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml \
   --token YOUR_GITHUB_TOKEN
 
 # Install and start as a service
-sudo family-policy agent install
-sudo family-policy agent start
+sudo family-policy install-service
+sudo family-policy start
 
 # Check status
-sudo family-policy agent status
+sudo family-policy status
 ```
 
 ### Linux (Fedora/RHEL)
@@ -30,16 +30,16 @@ sudo family-policy agent status
 sudo rpm -i family-policy-0.1.0-1.x86_64.rpm
 
 # Configure the agent
-sudo family-policy agent setup \
+sudo family-policy setup \
   --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml \
   --token YOUR_GITHUB_TOKEN
 
 # Install and start as a service
-sudo family-policy agent install
-sudo family-policy agent start
+sudo family-policy install-service
+sudo family-policy start
 
 # Check status
-sudo family-policy agent status
+sudo family-policy status
 ```
 
 ### macOS
@@ -49,15 +49,15 @@ sudo family-policy agent status
 sudo installer -pkg family-policy-0.1.0.pkg -target /
 
 # Configure the agent
-sudo family-policy agent setup \
+sudo family-policy setup \
   --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml \
   --token YOUR_GITHUB_TOKEN
 
 # Install as a LaunchDaemon (will auto-start on boot)
-sudo family-policy agent install
+sudo family-policy install-service
 
 # Check status
-sudo family-policy agent status
+sudo family-policy status
 ```
 
 ### Windows
@@ -68,12 +68,12 @@ sudo family-policy agent status
 .\install.ps1
 
 # Configure the agent
-family-policy agent setup `
+family-policy setup `
   --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml `
   --token YOUR_GITHUB_TOKEN
 
 # Start the agent (manual mode on Windows)
-family-policy agent start --no-daemon
+family-policy start --no-daemon
 ```
 
 ## Installation Methods
@@ -240,7 +240,7 @@ git push -u origin main
 ### 3. Configure the Agent
 
 ```bash
-sudo family-policy agent setup \
+sudo family-policy setup \
   --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml \
   --token ghp_YOUR_TOKEN_HERE \
   --poll-interval 300
@@ -257,14 +257,14 @@ Configuration is saved to:
 
 ```bash
 # Enable service to start on boot
-sudo family-policy agent install
+sudo family-policy install-service
 
 # Start the service
-sudo family-policy agent start
+sudo family-policy start
 
 # Check status
 sudo systemctl status family-policy-agent
-sudo family-policy agent status
+sudo family-policy status
 
 # View logs
 sudo journalctl -u family-policy-agent -f
@@ -274,11 +274,11 @@ sudo journalctl -u family-policy-agent -f
 
 ```bash
 # Install LaunchDaemon (auto-starts on boot)
-sudo family-policy agent install
+sudo family-policy install-service
 
 # Check status
 sudo launchctl list | grep family-policy
-sudo family-policy agent status
+sudo family-policy status
 
 # View logs
 tail -f /var/log/family-policy-agent.log
@@ -290,7 +290,7 @@ Windows doesn't support automatic service installation yet. Run manually:
 
 ```powershell
 # Run in foreground (for testing)
-family-policy agent start --no-daemon
+family-policy start --no-daemon
 
 # Or create a scheduled task to run at startup
 # (Use Task Scheduler GUI or PowerShell)
@@ -302,13 +302,13 @@ After installation, verify everything is working:
 
 ```bash
 # Check agent status
-sudo family-policy agent status
+sudo family-policy status
 
 # Force an immediate policy check
-sudo family-policy agent check-now
+sudo family-policy check-now
 
 # View applied configuration
-sudo family-policy agent show-config
+sudo family-policy show-config
 ```
 
 Expected output:
@@ -363,8 +363,8 @@ The agent will detect changes within the polling interval (default: 5 minutes).
 
 ```bash
 # Stop and remove service
-sudo family-policy agent stop
-sudo family-policy agent uninstall
+sudo family-policy stop
+sudo family-policy uninstall-service
 
 # Remove package (keeps config)
 sudo dpkg -r family-policy
@@ -379,8 +379,8 @@ sudo rm -rf /var/lib/browser-extension-policy
 
 ```bash
 # Stop and remove service
-sudo family-policy agent stop
-sudo family-policy agent uninstall
+sudo family-policy stop
+sudo family-policy uninstall-service
 
 # Remove package
 sudo rpm -e family-policy
@@ -397,8 +397,8 @@ sudo rm -rf /var/lib/browser-extension-policy
 sudo packaging/macos/uninstall.sh
 
 # Or manually:
-sudo family-policy agent stop
-sudo family-policy agent uninstall
+sudo family-policy stop
+sudo family-policy uninstall-service
 sudo rm /usr/local/bin/family-policy
 sudo rm -rf "/Library/Application Support/family-policy"
 sudo rm -rf "/Library/Application Support/browser-extension-policy"
@@ -447,12 +447,12 @@ Common issues:
 
 1. Check agent status:
    ```bash
-   sudo family-policy agent status
+   sudo family-policy status
    ```
 
 2. Force immediate check:
    ```bash
-   sudo family-policy agent check-now
+   sudo family-policy check-now
    ```
 
 3. Verify policy file is valid YAML:
@@ -469,7 +469,7 @@ Ensure the agent is running with root/administrator privileges:
 
 ```bash
 # Linux/macOS
-sudo family-policy agent start
+sudo family-policy start
 
 # Windows
 # Run PowerShell as Administrator
@@ -486,7 +486,7 @@ sudo family-policy agent start
 ### Custom Polling Interval
 
 ```bash
-sudo family-policy agent setup \
+sudo family-policy setup \
   --url YOUR_URL \
   --token YOUR_TOKEN \
   --poll-interval 600  # Check every 10 minutes
@@ -507,11 +507,11 @@ On each machine, point to the specific policy file:
 
 ```bash
 # Kids PC
-sudo family-policy agent setup \
+sudo family-policy setup \
   --url https://raw.githubusercontent.com/USER/REPO/main/kids-pc.yaml
 
 # Living Room Mac
-sudo family-policy agent setup \
+sudo family-policy setup \
   --url https://raw.githubusercontent.com/USER/REPO/main/living-room-mac.yaml
 ```
 

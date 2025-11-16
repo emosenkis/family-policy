@@ -9,7 +9,7 @@ pub mod edge;
 pub mod firefox;
 
 /// Apply policies for all configured browsers
-pub fn apply_policies(config: &Config, _current_state: Option<&State>) -> Result<AppliedPolicies> {
+pub fn apply_policies(config: &Config, _current_state: Option<&State>, dry_run: bool) -> Result<AppliedPolicies> {
     let mut applied = AppliedPolicies::default();
 
     // Convert new config format to browser-specific configs
@@ -17,37 +17,64 @@ pub fn apply_policies(config: &Config, _current_state: Option<&State>) -> Result
 
     // Apply Chrome policies
     if let Some(chrome_config) = chrome_config {
-        println!("Applying Chrome policies...");
-        let state = chrome::apply_chrome_policies(&chrome_config)
+        if dry_run {
+            println!("═══ Chrome Policies (Dry Run) ═══");
+        } else {
+            println!("Applying Chrome policies...");
+        }
+        let state = chrome::apply_chrome_policies(&chrome_config, dry_run)
             .context("Failed to apply Chrome policies")?;
 
         if !state.is_empty() {
             applied.chrome = Some(state);
-            println!("✓ Chrome policies applied successfully");
+            if !dry_run {
+                println!("✓ Chrome policies applied successfully");
+            }
+        }
+        if dry_run {
+            println!();
         }
     }
 
     // Apply Firefox policies
     if let Some(firefox_config) = firefox_config {
-        println!("Applying Firefox policies...");
-        let state = firefox::apply_firefox_policies(&firefox_config)
+        if dry_run {
+            println!("═══ Firefox Policies (Dry Run) ═══");
+        } else {
+            println!("Applying Firefox policies...");
+        }
+        let state = firefox::apply_firefox_policies(&firefox_config, dry_run)
             .context("Failed to apply Firefox policies")?;
 
         if !state.is_empty() {
             applied.firefox = Some(state);
-            println!("✓ Firefox policies applied successfully");
+            if !dry_run {
+                println!("✓ Firefox policies applied successfully");
+            }
+        }
+        if dry_run {
+            println!();
         }
     }
 
     // Apply Edge policies
     if let Some(edge_config) = edge_config {
-        println!("Applying Edge policies...");
-        let state = edge::apply_edge_policies(&edge_config)
+        if dry_run {
+            println!("═══ Edge Policies (Dry Run) ═══");
+        } else {
+            println!("Applying Edge policies...");
+        }
+        let state = edge::apply_edge_policies(&edge_config, dry_run)
             .context("Failed to apply Edge policies")?;
 
         if !state.is_empty() {
             applied.edge = Some(state);
-            println!("✓ Edge policies applied successfully");
+            if !dry_run {
+                println!("✓ Edge policies applied successfully");
+            }
+        }
+        if dry_run {
+            println!();
         }
     }
 

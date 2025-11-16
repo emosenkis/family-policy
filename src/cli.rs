@@ -31,33 +31,15 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Agent commands for remote policy management
-    Agent {
+    /// Configuration file management
+    Config {
         #[command(subcommand)]
-        command: AgentCommands,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub enum AgentCommands {
-    /// Setup agent configuration
-    Setup {
-        /// Raw GitHub URL to policy file
-        #[arg(long)]
-        url: String,
-
-        /// GitHub Personal Access Token (for private repos)
-        #[arg(long)]
-        token: Option<String>,
-
-        /// Polling interval in seconds
-        #[arg(long, default_value = "300")]
-        poll_interval: u64,
+        command: ConfigCommands,
     },
     /// Install agent as a system service
-    Install,
+    InstallService,
     /// Uninstall agent system service
-    Uninstall,
+    UninstallService,
     /// Start agent daemon
     Start {
         /// Run in foreground (don't daemonize)
@@ -72,4 +54,18 @@ pub enum AgentCommands {
     Status,
     /// Show currently applied configuration
     ShowConfig,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigCommands {
+    /// Initialize a new configuration file with examples
+    Init {
+        /// Output path for the configuration file
+        #[arg(short, long, default_value = "family-policy.yaml")]
+        output: PathBuf,
+
+        /// Overwrite existing file if it exists
+        #[arg(short, long)]
+        force: bool,
+    },
 }
