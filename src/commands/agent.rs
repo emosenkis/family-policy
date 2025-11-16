@@ -1,47 +1,15 @@
 use anyhow::{Context, Result};
 
 use crate::agent;
-use crate::cli::AgentCommands;
 use crate::config;
 use crate::platform;
 
 use super::utils::{format_duration, init_logging, print_sudo_message};
 
-/// Run agent subcommands
-pub fn run_agent_command(command: AgentCommands, verbose: bool) -> Result<()> {
+/// Setup agent configuration
+pub fn setup(url: String, token: Option<String>, poll_interval: u64, verbose: bool) -> Result<()> {
     // Initialize logging
     init_logging(verbose);
-
-    match command {
-        AgentCommands::Setup { url, token, poll_interval } => {
-            setup(url, token, poll_interval)
-        }
-        AgentCommands::Install => {
-            install()
-        }
-        AgentCommands::Uninstall => {
-            uninstall_service()
-        }
-        AgentCommands::Start { no_daemon } => {
-            start(no_daemon)
-        }
-        AgentCommands::Stop => {
-            stop()
-        }
-        AgentCommands::CheckNow => {
-            check_now()
-        }
-        AgentCommands::Status => {
-            status()
-        }
-        AgentCommands::ShowConfig => {
-            show_config()
-        }
-    }
-}
-
-/// Setup agent configuration
-fn setup(url: String, token: Option<String>, poll_interval: u64) -> Result<()> {
     // Check for admin privileges
     if let Err(e) = platform::ensure_admin_privileges() {
         eprintln!("Insufficient privileges: {:#}", e);
@@ -112,7 +80,7 @@ fn setup(url: String, token: Option<String>, poll_interval: u64) -> Result<()> {
     println!();
     println!("Next steps:");
     println!("  1. Start the agent:");
-    println!("     sudo family-policy agent start");
+    println!("     sudo family-policy start");
     println!();
     println!("The agent will check for policy updates every {} seconds.", poll_interval);
 
@@ -120,7 +88,9 @@ fn setup(url: String, token: Option<String>, poll_interval: u64) -> Result<()> {
 }
 
 /// Install agent as a system service
-fn install() -> Result<()> {
+pub fn install_service(verbose: bool) -> Result<()> {
+    // Initialize logging
+    init_logging(verbose);
     // Check for admin privileges
     if let Err(e) = platform::ensure_admin_privileges() {
         eprintln!("Insufficient privileges: {:#}", e);
@@ -179,7 +149,7 @@ fn install() -> Result<()> {
         println!();
         println!("To check status:");
         println!("  sudo launchctl list | grep family-policy");
-        println!("  sudo family-policy agent status");
+        println!("  sudo family-policy status");
     }
 
     #[cfg(target_os = "windows")]
@@ -187,7 +157,7 @@ fn install() -> Result<()> {
         println!("Windows Service installation is not yet implemented.");
         println!();
         println!("You can run the agent manually:");
-        println!("  family-policy agent start --no-daemon");
+        println!("  family-policy start --no-daemon");
         println!();
         println!("Or use Task Scheduler to run it at startup.");
     }
@@ -196,7 +166,9 @@ fn install() -> Result<()> {
 }
 
 /// Uninstall agent system service
-fn uninstall_service() -> Result<()> {
+pub fn uninstall_service(verbose: bool) -> Result<()> {
+    // Initialize logging
+    init_logging(verbose);
     // Check for admin privileges
     if let Err(e) = platform::ensure_admin_privileges() {
         eprintln!("Insufficient privileges: {:#}", e);
@@ -260,7 +232,9 @@ fn uninstall_service() -> Result<()> {
 }
 
 /// Start agent daemon
-fn start(no_daemon: bool) -> Result<()> {
+pub fn start(no_daemon: bool, verbose: bool) -> Result<()> {
+    // Initialize logging
+    init_logging(verbose);
     // Check for admin privileges
     if let Err(e) = platform::ensure_admin_privileges() {
         eprintln!("Insufficient privileges: {:#}", e);
@@ -276,7 +250,7 @@ fn start(no_daemon: bool) -> Result<()> {
 
         let config_path = agent::get_agent_config_path()?;
         let config = agent::AgentConfig::load(&config_path)
-            .context("Failed to load agent configuration. Run 'family-policy agent setup' first.")?;
+            .context("Failed to load agent configuration. Run 'family-policy setup' first.")?;
 
         // Run agent
         let runtime = tokio::runtime::Runtime::new()?;
@@ -295,14 +269,14 @@ fn start(no_daemon: bool) -> Result<()> {
 
             if !output.status.success() {
                 let error = String::from_utf8_lossy(&output.stderr);
-                anyhow::bail!("Failed to start service: {}\n\nHint: Have you run 'sudo family-policy agent install'?", error);
+                anyhow::bail!("Failed to start service: {}\n\nHint: Have you run 'sudo family-policy install-service'?", error);
             }
 
             println!("✓ Service started successfully");
             println!();
             println!("To check status:");
             println!("  sudo systemctl status family-policy-agent");
-            println!("  sudo family-policy agent status");
+            println!("  sudo family-policy status");
 
             Ok(())
         }
@@ -317,7 +291,7 @@ fn start(no_daemon: bool) -> Result<()> {
             println!();
             println!("To check status:");
             println!("  sudo launchctl list | grep family-policy");
-            println!("  sudo family-policy agent status");
+            println!("  sudo family-policy status");
 
             Ok(())
         }
@@ -330,7 +304,9 @@ fn start(no_daemon: bool) -> Result<()> {
 }
 
 /// Stop agent daemon
-fn stop() -> Result<()> {
+pub fn stop(verbose: bool) -> Result<()> {
+    // Initialize logging
+    init_logging(verbose);
     // Check for admin privileges
     if let Err(e) = platform::ensure_admin_privileges() {
         eprintln!("Insufficient privileges: {:#}", e);
@@ -385,7 +361,9 @@ fn stop() -> Result<()> {
 }
 
 /// Check for policy updates now
-fn check_now() -> Result<()> {
+pub fn check_now(verbose: bool) -> Result<()> {
+    // Initialize logging
+    init_logging(verbose);
     // Check for admin privileges
     if let Err(e) = platform::ensure_admin_privileges() {
         eprintln!("Insufficient privileges: {:#}", e);
@@ -397,7 +375,7 @@ fn check_now() -> Result<()> {
 
     let config_path = agent::get_agent_config_path()?;
     let config = agent::AgentConfig::load(&config_path)
-        .context("Failed to load agent configuration. Run 'family-policy agent setup' first.")?;
+        .context("Failed to load agent configuration. Run 'family-policy setup' first.")?;
 
     let runtime = tokio::runtime::Runtime::new()?;
     let applied = runtime.block_on(async {
@@ -414,14 +392,16 @@ fn check_now() -> Result<()> {
 }
 
 /// Show agent status
-fn status() -> Result<()> {
+pub fn status(verbose: bool) -> Result<()> {
+    // Initialize logging
+    init_logging(verbose);
     println!("Family Policy Agent Status");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     // Load configuration
     let config_path = agent::get_agent_config_path()?;
     let config = agent::AgentConfig::load(&config_path)
-        .context("Agent not configured. Run 'family-policy agent setup' first.")?;
+        .context("Agent not configured. Run 'family-policy setup' first.")?;
 
     println!("Policy URL:  {}", config.github.policy_url);
     println!("Poll Interval: {} seconds", config.agent.poll_interval);
@@ -482,13 +462,15 @@ fn status() -> Result<()> {
 }
 
 /// Show currently applied configuration
-fn show_config() -> Result<()> {
+pub fn show_config(verbose: bool) -> Result<()> {
+    // Initialize logging
+    init_logging(verbose);
     println!("Current Policy Configuration");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     // Load state
     let state = agent::AgentState::load()?
-        .context("No policy applied yet. Run 'family-policy agent check-now' to apply policy.")?;
+        .context("No policy applied yet. Run 'family-policy check-now' to apply policy.")?;
 
     if let Some(last_updated) = state.last_updated {
         println!("Applied at: {}", last_updated.format("%Y-%m-%d %H:%M:%S %Z"));

@@ -6,7 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/family-policy agent start --no-daemon
+ExecStart=/usr/local/bin/family-policy start --no-daemon
 Restart=on-failure
 RestartSec=10s
 User=root

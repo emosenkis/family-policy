@@ -25,8 +25,29 @@ fn run() -> Result<()> {
     // Handle subcommands
     if let Some(command) = args.command {
         return match command {
-            Commands::Agent { command } => {
-                commands::run_agent_command(command, args.verbose)
+            Commands::Setup { url, token, poll_interval } => {
+                commands::agent::setup(url, token, poll_interval, args.verbose)
+            }
+            Commands::InstallService => {
+                commands::agent::install_service(args.verbose)
+            }
+            Commands::UninstallService => {
+                commands::agent::uninstall_service(args.verbose)
+            }
+            Commands::Start { no_daemon } => {
+                commands::agent::start(no_daemon, args.verbose)
+            }
+            Commands::Stop => {
+                commands::agent::stop(args.verbose)
+            }
+            Commands::CheckNow => {
+                commands::agent::check_now(args.verbose)
+            }
+            Commands::Status => {
+                commands::agent::status(args.verbose)
+            }
+            Commands::ShowConfig => {
+                commands::agent::show_config(args.verbose)
             }
         };
     }

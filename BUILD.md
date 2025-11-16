@@ -189,7 +189,7 @@ cargo test
 sudo ./target/release/family-policy --config examples/policy.yaml --dry-run
 
 # Test agent mode
-./target/release/family-policy agent --help
+./target/release/family-policy --help
 ```
 
 ## Creating Packages

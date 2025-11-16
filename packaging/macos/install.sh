@@ -58,7 +58,7 @@ echo -e "${GREEN}Installation complete!${NC}"
 echo
 echo "Next steps:"
 echo "  1. Configure the agent:"
-echo "     sudo family-policy agent setup \\"
+echo "     sudo family-policy setup \\"
 echo "       --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml \\"
 echo "       --token YOUR_GITHUB_TOKEN"
 echo
@@ -67,7 +67,7 @@ echo "     sudo launchctl load $PLIST_PATH"
 echo
 echo "  3. Check status:"
 echo "     sudo launchctl list | grep family-policy"
-echo "     sudo family-policy agent status"
+echo "     sudo family-policy status"
 echo
 echo "  4. View logs:"
 echo "     tail -f /var/log/family-policy-agent.log"

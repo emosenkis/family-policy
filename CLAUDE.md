@@ -49,22 +49,22 @@ The agent mode enables remote policy management via GitHub polling:
 
 ```bash
 # Setup agent with GitHub policy URL
-sudo family-policy agent setup \
+sudo family-policy setup \
   --url https://raw.githubusercontent.com/user/repo/main/policy.yaml \
   --token <github-token> \
   --poll-interval 300
 
 # Start agent daemon (foreground mode)
-sudo family-policy agent start --no-daemon
+sudo family-policy start --no-daemon
 
 # Check for policy updates immediately
-sudo family-policy agent check-now
+sudo family-policy check-now
 
 # Show agent status
-family-policy agent status
+family-policy status
 
 # Show currently applied configuration
-family-policy agent show-config
+family-policy show-config
 ```
 
 ## Architecture

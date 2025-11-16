@@ -31,15 +31,6 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Agent commands for remote policy management
-    Agent {
-        #[command(subcommand)]
-        command: AgentCommands,
-    },
-}
-
-#[derive(Subcommand, Debug)]
-pub enum AgentCommands {
     /// Setup agent configuration
     Setup {
         /// Raw GitHub URL to policy file
@@ -55,9 +46,9 @@ pub enum AgentCommands {
         poll_interval: u64,
     },
     /// Install agent as a system service
-    Install,
+    InstallService,
     /// Uninstall agent system service
-    Uninstall,
+    UninstallService,
     /// Start agent daemon
     Start {
         /// Run in foreground (don't daemonize)

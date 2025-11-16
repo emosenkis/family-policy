@@ -60,13 +60,13 @@ Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Open a new PowerShell window (to refresh PATH)" -ForegroundColor White
 Write-Host ""
 Write-Host "  2. Configure the agent:" -ForegroundColor White
-Write-Host "     family-policy agent setup ``" -ForegroundColor Gray
+Write-Host "     family-policy setup ``" -ForegroundColor Gray
 Write-Host "       --url https://raw.githubusercontent.com/USER/REPO/main/policy.yaml ``" -ForegroundColor Gray
 Write-Host "       --token YOUR_GITHUB_TOKEN" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  3. Start the agent:" -ForegroundColor White
-Write-Host "     family-policy agent start --no-daemon" -ForegroundColor Gray
+Write-Host "     family-policy start --no-daemon" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  4. Check status:" -ForegroundColor White
-Write-Host "     family-policy agent status" -ForegroundColor Gray
+Write-Host "     family-policy status" -ForegroundColor Gray
 Write-Host ""
