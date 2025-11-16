@@ -66,8 +66,17 @@
             </Directory>
         </Directory>
 
-        <!-- Add to PATH -->
+        <!-- Binary installation -->
         <DirectoryRef Id='APPLICATIONROOTDIRECTORY'>
+            <Component Id='MainExecutable' Guid='B1B1B1B1-B1B1-B1B1-B1B1-B1B1B1B1B1B1'>
+                <File
+                    Id='FamilyPolicyEXE'
+                    Name='family-policy.exe'
+                    DiskId='1'
+                    Source='$(var.CargoTargetBinDir)\family-policy.exe'
+                    KeyPath='yes' />
+            </Component>
+
             <Component Id='Path' Guid='F5F5F5F5-F5F5-F5F5-F5F5-F5F5F5F5F5F5'>
                 <Environment
                     Id='PATH'
@@ -91,7 +100,7 @@
             AllowAdvertise='no'
             Absent='disallow'>
 
-            <ComponentGroupRef Id='Binaries' />
+            <ComponentRef Id='MainExecutable' />
             <ComponentRef Id='Path' />
             <ComponentRef Id='ConfigDirComponent' />
             <ComponentRef Id='StateDirComponent' />
