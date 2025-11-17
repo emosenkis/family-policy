@@ -6,16 +6,71 @@ use std::path::PathBuf;
 
 use crate::config::Config;
 
+use uuid::Uuid;
+
 /// Current state version
 const STATE_VERSION: &str = "1.0";
 
 /// State tracking for idempotent operations
+/// Works for both local mode and agent mode
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct State {
     pub version: String,
     pub config_hash: String,
     pub last_updated: DateTime<Utc>,
     pub applied_policies: AppliedPolicies,
+
+    // Agent-specific fields
+    /// Unique identifier for this machine (generated on first run)
+    #[serde(default = "generate_machine_id")]
+    pub machine_id: String,
+
+    /// Last time agent checked for updates (None in local mode)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_checked: Option<DateTime<Utc>>,
+
+    /// HTTP ETag from last remote policy fetch (for caching)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub etag: Option<String>,
+}
+
+fn generate_machine_id() -> String {
+    Uuid::new_v4().to_string()
+}
+
+impl State {
+    /// Create a new state for agent mode
+    pub fn new_agent() -> Self {
+        Self {
+            version: STATE_VERSION.to_string(),
+            config_hash: String::new(),
+            last_updated: Utc::now(),
+            applied_policies: AppliedPolicies::default(),
+            machine_id: Uuid::new_v4().to_string(),
+            last_checked: None,
+            etag: None,
+        }
+    }
+
+    /// Update state after checking for policy (agent mode)
+    pub fn update_checked(&mut self) {
+        self.last_checked = Some(Utc::now());
+    }
+
+    /// Update state after applying policy (agent mode)
+    pub fn update_applied(&mut self, config_hash: String, etag: Option<String>, applied_policies: AppliedPolicies) {
+        self.config_hash = config_hash;
+        self.last_updated = Utc::now();
+        self.last_checked = Some(Utc::now());
+        self.etag = etag;
+        self.applied_policies = applied_policies;
+    }
+
+    /// Update ETag without applying policy (agent mode)
+    pub fn update_etag(&mut self, etag: Option<String>) {
+        self.etag = etag;
+        self.last_checked = Some(Utc::now());
+    }
 }
 
 /// Applied policies for all browsers
@@ -201,6 +256,9 @@ pub fn create_state(config: &Config, applied_policies: AppliedPolicies) -> Resul
         config_hash: compute_config_hash(config)?,
         last_updated: Utc::now(),
         applied_policies,
+        machine_id: Uuid::new_v4().to_string(),
+        last_checked: None,
+        etag: None,
     })
 }
 

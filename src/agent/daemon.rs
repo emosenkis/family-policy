@@ -3,10 +3,10 @@ use sha2::{Digest, Sha256};
 use std::time::Duration;
 use tokio::time::sleep;
 
-use super::{AgentConfig, AgentState, GitHubPoller, PolicyFetchResult, PollingScheduler};
+use super::{AgentConfig, GitHubPoller, PolicyFetchResult, PollingScheduler, State};
 use crate::config;
 use crate::policy;
-use crate::state::AppliedPolicies;
+use crate::state::{AppliedPolicies, load_state, save_state};
 
 /// Run the agent daemon in a loop
 pub async fn run_agent_daemon(config: AgentConfig) -> Result<()> {
@@ -44,8 +44,8 @@ pub async fn run_agent_daemon(config: AgentConfig) -> Result<()> {
 }
 
 /// Check for policy updates and apply if changed (single execution)
-pub async fn check_and_apply_once(config: &AgentConfig) -> Result<bool> {
-    check_and_apply_policy(config).await
+pub async fn check_and_apply_once(config: &AgentConfig, dry_run: bool) -> Result<bool> {
+    check_and_apply_policy(config, dry_run).await
 }
 
 /// Check and apply policy with retry logic
@@ -54,7 +54,7 @@ async fn check_and_apply_with_retry(config: &AgentConfig) -> Result<bool> {
     let mut retries = 0;
 
     loop {
-        match check_and_apply_policy(config).await {
+        match check_and_apply_policy(config, false).await {
             Ok(applied) => return Ok(applied),
             Err(e) if retries < max_retries => {
                 retries += 1;
@@ -79,35 +79,39 @@ async fn check_and_apply_with_retry(config: &AgentConfig) -> Result<bool> {
 }
 
 /// Check for policy updates and apply if changed
-async fn check_and_apply_policy(config: &AgentConfig) -> Result<bool> {
+async fn check_and_apply_policy(config: &AgentConfig, dry_run: bool) -> Result<bool> {
     // 1. Load current state
-    let mut state = AgentState::load()?.unwrap_or_default();
+    let mut state = load_state()?.unwrap_or_else(|| State::new_agent());
 
     // 2. Create GitHub poller
     let poller = GitHubPoller::new(config.github.clone())?;
 
     // 3. Fetch policy with ETag
     let result = poller
-        .fetch_policy(state.github_etag.as_deref())
+        .fetch_policy(state.etag.as_deref())
         .await?;
 
     // 4. Handle result
     match result {
         PolicyFetchResult::NotModified => {
-            // No change, just update check time
-            state.update_checked();
-            state.save().context("Failed to save state")?;
+            // No change, just update check time (skip if dry-run)
+            if !dry_run {
+                state.update_checked();
+                save_state(&state).context("Failed to save state")?;
+            }
             Ok(false)
         }
         PolicyFetchResult::Updated { content, etag } => {
             // Content changed, check if policy actually changed
             let new_hash = compute_yaml_hash(&content);
 
-            if state.config_hash.as_ref() == Some(&new_hash) {
+            if state.config_hash == new_hash {
                 // Same content (hash collision or ETag issue), just update ETag
                 tracing::debug!("Content downloaded but hash unchanged");
-                state.update_etag(etag);
-                state.save().context("Failed to save state")?;
+                if !dry_run {
+                    state.update_etag(etag);
+                    save_state(&state).context("Failed to save state")?;
+                }
                 return Ok(false);
             }
 
@@ -119,21 +123,24 @@ async fn check_and_apply_policy(config: &AgentConfig) -> Result<bool> {
                 .context("Failed to parse policy YAML")?;
 
             // Apply policies using existing logic
-            let applied_policies = apply_policy_config(&policy_config)
+            let applied_policies = apply_policy_config(&policy_config, dry_run)
                 .context("Failed to apply policies")?;
 
-            // Update state
-            state.update_applied(new_hash, etag, applied_policies);
-            state.save().context("Failed to save state")?;
-
-            tracing::info!("Policy applied successfully");
+            // Update state (skip if dry-run)
+            if !dry_run {
+                state.update_applied(new_hash, etag, applied_policies);
+                save_state(&state).context("Failed to save state")?;
+                tracing::info!("Policy applied successfully");
+            } else {
+                tracing::info!("Policy would be applied (dry-run)");
+            }
             Ok(true)
         }
     }
 }
 
 /// Apply policy configuration using existing policy modules
-fn apply_policy_config(config: &config::Config) -> Result<AppliedPolicies> {
+fn apply_policy_config(config: &config::Config, dry_run: bool) -> Result<AppliedPolicies> {
     // Convert to browser-specific configs
     let (chrome_config, firefox_config, edge_config) = config::to_browser_configs(config);
 
@@ -141,22 +148,34 @@ fn apply_policy_config(config: &config::Config) -> Result<AppliedPolicies> {
 
     // Apply Chrome policies
     if let Some(chrome) = chrome_config {
-        tracing::info!("Applying Chrome policies...");
-        let state = policy::chrome::apply_chrome_policies(&chrome, false)?;
+        if dry_run {
+            tracing::info!("Would apply Chrome policies (dry-run)...");
+        } else {
+            tracing::info!("Applying Chrome policies...");
+        }
+        let state = policy::chrome::apply_chrome_policies(&chrome, dry_run)?;
         applied.chrome = Some(state);
     }
 
     // Apply Firefox policies
     if let Some(firefox) = firefox_config {
-        tracing::info!("Applying Firefox policies...");
-        let state = policy::firefox::apply_firefox_policies(&firefox, false)?;
+        if dry_run {
+            tracing::info!("Would apply Firefox policies (dry-run)...");
+        } else {
+            tracing::info!("Applying Firefox policies...");
+        }
+        let state = policy::firefox::apply_firefox_policies(&firefox, dry_run)?;
         applied.firefox = Some(state);
     }
 
     // Apply Edge policies
     if let Some(edge) = edge_config {
-        tracing::info!("Applying Edge policies...");
-        let state = policy::edge::apply_edge_policies(&edge, false)?;
+        if dry_run {
+            tracing::info!("Would apply Edge policies (dry-run)...");
+        } else {
+            tracing::info!("Applying Edge policies...");
+        }
+        let state = policy::edge::apply_edge_policies(&edge, dry_run)?;
         applied.edge = Some(state);
     }
 

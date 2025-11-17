@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 
 use crate::agent;
 use crate::platform;
+use crate::state;
 
 use super::utils::{format_duration, init_logging, print_sudo_message};
 
@@ -405,14 +406,22 @@ pub fn stop(verbose: bool) -> Result<()> {
 }
 
 /// Check for policy updates now
-pub fn check_now(verbose: bool) -> Result<()> {
+pub fn check_now(dry_run: bool, verbose: bool) -> Result<()> {
     // Initialize logging
     init_logging(verbose);
-    // Check for admin privileges
-    if let Err(e) = platform::ensure_admin_privileges() {
-        eprintln!("Insufficient privileges: {:#}", e);
-        print_sudo_message();
-        std::process::exit(1);
+
+    // Check for admin privileges (skip if dry-run)
+    if !dry_run {
+        if let Err(e) = platform::ensure_admin_privileges() {
+            eprintln!("Insufficient privileges: {:#}", e);
+            print_sudo_message();
+            std::process::exit(1);
+        }
+    }
+
+    if dry_run {
+        println!("DRY RUN MODE - No changes will be made");
+        println!();
     }
 
     println!("Checking for policy updates...");
@@ -423,13 +432,21 @@ pub fn check_now(verbose: bool) -> Result<()> {
 
     let runtime = tokio::runtime::Runtime::new()?;
     let applied = runtime.block_on(async {
-        agent::check_and_apply_once(&config).await
+        agent::check_and_apply_once(&config, dry_run).await
     })?;
 
-    if applied {
-        println!("✓ Policy updated and applied successfully");
+    if dry_run {
+        if applied {
+            println!("✓ Policy would be updated (dry-run)");
+        } else {
+            println!("✓ Policy unchanged");
+        }
     } else {
-        println!("✓ Policy unchanged");
+        if applied {
+            println!("✓ Policy updated and applied successfully");
+        } else {
+            println!("✓ Policy unchanged");
+        }
     }
 
     Ok(())
@@ -451,7 +468,7 @@ pub fn status(verbose: bool) -> Result<()> {
     println!("Poll Interval: {} seconds", config.agent.poll_interval);
 
     // Load state
-    match agent::AgentState::load()? {
+    match state::load_state()? {
         Some(state) => {
             println!();
             if let Some(last_checked) = state.last_checked {
@@ -461,16 +478,12 @@ pub fn status(verbose: bool) -> Result<()> {
                     format_duration(ago));
             }
 
-            if let Some(last_updated) = state.last_updated {
-                let ago = chrono::Utc::now() - last_updated;
-                println!("Last updated:  {} ({} ago)",
-                    last_updated.format("%Y-%m-%d %H:%M:%S %Z"),
-                    format_duration(ago));
-            }
+            let ago = chrono::Utc::now() - state.last_updated;
+            println!("Last updated:  {} ({} ago)",
+                state.last_updated.format("%Y-%m-%d %H:%M:%S %Z"),
+                format_duration(ago));
 
-            if let Some(hash) = state.config_hash {
-                println!("Current hash:  {}...", &hash[..16]);
-            }
+            println!("Current hash:  {}...", &state.config_hash[..16]);
 
             // Show applied policies
             println!();
@@ -513,16 +526,11 @@ pub fn show_config(verbose: bool) -> Result<()> {
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     // Load state
-    let state = agent::AgentState::load()?
+    let state = state::load_state()?
         .context("No policy applied yet. Run 'family-policy check-now' to apply policy.")?;
 
-    if let Some(last_updated) = state.last_updated {
-        println!("Applied at: {}", last_updated.format("%Y-%m-%d %H:%M:%S %Z"));
-    }
-
-    if let Some(hash) = state.config_hash {
-        println!("Hash: {}", hash);
-    }
+    println!("Applied at: {}", state.last_updated.format("%Y-%m-%d %H:%M:%S %Z"));
+    println!("Hash: {}", state.config_hash);
 
     println!();
 
