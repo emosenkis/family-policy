@@ -14,4 +14,4 @@ pub use config::{AgentConfig, AgentSettings, GitHubConfig, LoggingConfig, Securi
 pub use daemon::{run_agent_daemon, check_and_apply_once};
 pub use poller::{GitHubPoller, PolicyFetchResult};
 pub use scheduler::PollingScheduler;
-pub use state::AgentState;
+pub use state::State; // Re-export unified State type

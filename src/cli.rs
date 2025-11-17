@@ -5,6 +5,8 @@ use std::path::PathBuf;
 ///
 /// Manages browser extension force-install policies and privacy controls
 /// for Chrome, Firefox, and Edge across Windows, macOS, and Linux.
+///
+/// If no subcommand is specified, runs 'apply' by default.
 #[derive(Parser, Debug)]
 #[command(name = "family-policy")]
 #[command(author, version, about, long_about = None)]
@@ -12,15 +14,15 @@ pub struct Args {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    /// Path to configuration file (for local mode)
+    /// Path to configuration file
     #[arg(short, long, default_value = "browser-policy.yaml", global = true)]
     pub config: PathBuf,
 
-    /// Remove all policies created by this tool (for local mode)
+    /// Remove all policies created by this tool
     #[arg(short, long, global = true)]
     pub uninstall: bool,
 
-    /// Show what would be done without making changes (for local mode)
+    /// Show what would be done without making changes
     #[arg(short = 'n', long, global = true)]
     pub dry_run: bool,
 
@@ -31,6 +33,8 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Apply policies from a local configuration file (default command)
+    Apply,
     /// Configuration file management
     Config {
         #[command(subcommand)]

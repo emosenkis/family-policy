@@ -23,39 +23,38 @@ fn run() -> Result<()> {
     let args = Args::parse();
 
     // Handle subcommands
-    if let Some(command) = args.command {
-        return match command {
-            Commands::Config { command } => {
-                match command {
-                    ConfigCommands::Init { output, force } => {
-                        commands::config::init(output, force, args.verbose)
-                    }
+    match args.command {
+        Some(Commands::Apply) | None => {
+            // Apply command (explicit) or no subcommand (default) - run local mode
+            commands::run_local_mode(args)
+        }
+        Some(Commands::Config { command }) => {
+            match command {
+                ConfigCommands::Init { output, force } => {
+                    commands::config::init(output, force, args.verbose)
                 }
             }
-            Commands::InstallService => {
-                commands::agent::install_service(args.verbose)
-            }
-            Commands::UninstallService => {
-                commands::agent::uninstall_service(args.verbose)
-            }
-            Commands::Start { no_daemon } => {
-                commands::agent::start(no_daemon, args.verbose)
-            }
-            Commands::Stop => {
-                commands::agent::stop(args.verbose)
-            }
-            Commands::CheckNow => {
-                commands::agent::check_now(args.verbose)
-            }
-            Commands::Status => {
-                commands::agent::status(args.verbose)
-            }
-            Commands::ShowConfig => {
-                commands::agent::show_config(args.verbose)
-            }
-        };
+        }
+        Some(Commands::InstallService) => {
+            commands::agent::install_service(args.verbose)
+        }
+        Some(Commands::UninstallService) => {
+            commands::agent::uninstall_service(args.verbose)
+        }
+        Some(Commands::Start { no_daemon }) => {
+            commands::agent::start(no_daemon, args.verbose)
+        }
+        Some(Commands::Stop) => {
+            commands::agent::stop(args.verbose)
+        }
+        Some(Commands::CheckNow) => {
+            commands::agent::check_now(args.dry_run, args.verbose)
+        }
+        Some(Commands::Status) => {
+            commands::agent::status(args.verbose)
+        }
+        Some(Commands::ShowConfig) => {
+            commands::agent::show_config(args.verbose)
+        }
     }
-
-    // No subcommand: run in local mode (backward compatibility)
-    commands::run_local_mode(args)
 }
