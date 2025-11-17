@@ -1,0 +1,8 @@
+# Cargo configuration for family-policy
+
+# Statically link the C runtime on Windows MSVC builds
+# This embeds VCRUNTIME140.dll into the executable, eliminating the need for
+# users to install the Visual C++ Redistributable package.
+# Trade-off: ~100KB larger binary size
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]
