@@ -2,21 +2,6 @@
 
 A Tauri v2-based system tray application with Vue frontend for managing Family Policy agent settings.
 
-## Screenshots
-
-### System Tray Icon
-![System Tray](../docs/screenshots/tray-icon.png)
-
-The application sits in your system tray for easy access. Click the icon to open settings, or right-click for a menu with Settings and Quit options.
-
-### Settings Window (Light Mode)
-![Settings Window - Light Mode](../docs/screenshots/settings-window.png)
-
-### Settings Window (Dark Mode)
-![Settings Window - Dark Mode](../docs/screenshots/settings-dark.png)
-
-The UI automatically adapts to your system's light or dark mode preference.
-
 ## Features
 
 - **System Tray Icon**: Sits in the system tray for easy access
