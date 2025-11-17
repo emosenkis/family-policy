@@ -147,6 +147,48 @@ fn apply_chromium_windows(
                     browser_config.browser_name, extension_key
                 )
             })?;
+
+        // Apply extension settings if configured
+        if !dry_run {
+            for ext in &config.extensions {
+                if !ext.settings.is_empty() {
+                    use crate::platform::windows::write_extension_settings;
+
+                    write_extension_settings(
+                        browser_config.registry_key,
+                        &ext.id,
+                        &ext.settings,
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Failed to apply settings for {} extension {}",
+                            browser_config.browser_name, ext.name
+                        )
+                    })?;
+
+                    tracing::debug!(
+                        "Applied settings for {} extension: {}",
+                        browser_config.browser_name,
+                        ext.name
+                    );
+                }
+            }
+        } else {
+            // Show extension settings in dry-run mode
+            for ext in &config.extensions {
+                if !ext.settings.is_empty() {
+                    println!(
+                        "Extension Settings: HKLM\\{}\\3rdparty\\extensions\\{}\\policy",
+                        browser_config.registry_key, ext.id
+                    );
+                    println!("  Extension: {}", ext.name);
+                    for (key, value) in &ext.settings {
+                        println!("  + {}: {:?}", key, value);
+                    }
+                    println!();
+                }
+            }
+        }
     }
 
     // Apply privacy controls - Incognito/InPrivate mode
@@ -258,6 +300,48 @@ fn apply_chromium_macos(
             )
         })?;
 
+    // Apply extension settings if configured
+    if !dry_run {
+        for ext in &config.extensions {
+            if !ext.settings.is_empty() {
+                use crate::platform::macos::write_extension_settings_plist;
+
+                write_extension_settings_plist(
+                    browser_config.bundle_id,
+                    &ext.id,
+                    &ext.settings,
+                )
+                .with_context(|| {
+                    format!(
+                        "Failed to apply settings for {} extension {}",
+                        browser_config.browser_name, ext.name
+                    )
+                })?;
+
+                tracing::debug!(
+                    "Applied settings for {} extension: {}",
+                    browser_config.browser_name,
+                    ext.name
+                );
+            }
+        }
+    } else {
+        // Show extension settings in dry-run mode
+        for ext in &config.extensions {
+            if !ext.settings.is_empty() {
+                println!(
+                    "Extension Settings Plist: /Library/Managed Preferences/{}.extensions.{}.plist",
+                    browser_config.bundle_id, ext.id
+                );
+                println!("  Extension: {}", ext.name);
+                for (key, value) in &ext.settings {
+                    println!("  + {}: {:?}", key, value);
+                }
+                println!();
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -310,6 +394,26 @@ fn apply_chromium_linux(
         policy["BrowserGuestModeEnabled"] = json!(!disable_guest_mode);
     }
 
+    // Apply extension settings if configured
+    let mut has_extension_settings = false;
+    let mut extensions_settings = serde_json::Map::new();
+
+    for ext in &config.extensions {
+        if !ext.settings.is_empty() {
+            has_extension_settings = true;
+            extensions_settings.insert(ext.id.clone(), json!(ext.settings));
+        }
+    }
+
+    if has_extension_settings {
+        let mut thirdparty = serde_json::Map::new();
+        thirdparty.insert(
+            "extensions".to_string(),
+            serde_json::Value::Object(extensions_settings),
+        );
+        policy["3rdparty"] = serde_json::Value::Object(thirdparty);
+    }
+
     apply_json_file_with_preview(&policy_file, policy, dry_run)
         .with_context(|| {
             format!(
@@ -342,6 +446,20 @@ fn remove_chromium_windows(browser_config: &ChromiumBrowserConfig) -> Result<()>
         );
     }
 
+    // Remove extension settings (all extensions under 3rdparty)
+    let thirdparty_key = format!("{}\\3rdparty", browser_config.registry_key);
+    if let Err(e) = remove_registry_policy(&thirdparty_key) {
+        // Don't warn if the key doesn't exist - it just means no extension settings were configured
+        if !e.to_string().contains("NotFound") {
+            tracing::warn!(
+                "Failed to remove {} extension settings at {}: {}",
+                browser_config.browser_name,
+                thirdparty_key,
+                e
+            );
+        }
+    }
+
     // Remove privacy controls
     let privacy_key = if browser_config.browser_name == "Chrome" {
         "IncognitoModeAvailability"
@@ -372,7 +490,7 @@ fn remove_chromium_windows(browser_config: &ChromiumBrowserConfig) -> Result<()>
 /// Remove Chromium policies on macOS
 #[cfg(target_os = "macos")]
 fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
-    use crate::platform::macos::remove_plist_keys;
+    use crate::platform::macos::{remove_plist_keys, remove_all_extension_settings_plists};
 
     tracing::debug!(
         "Removing {} policies on macOS",
@@ -398,6 +516,15 @@ fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
                 browser_config.browser_name
             )
         })?;
+
+    // Remove all extension settings plists
+    if let Err(e) = remove_all_extension_settings_plists(browser_config.bundle_id) {
+        tracing::warn!(
+            "Failed to remove {} extension settings plists: {}",
+            browser_config.browser_name,
+            e
+        );
+    }
 
     Ok(())
 }

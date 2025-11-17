@@ -160,6 +160,114 @@ pub fn bool_to_plist(val: bool) -> Value {
     Value::Boolean(val)
 }
 
+/// Convert serde_json::Value to plist::Value
+#[cfg(target_os = "macos")]
+pub fn json_to_plist(value: &serde_json::Value) -> Option<Value> {
+    match value {
+        serde_json::Value::Bool(b) => Some(Value::Boolean(*b)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Some(Value::Integer(i.into()))
+            } else if let Some(f) = n.as_f64() {
+                Some(Value::Real(f))
+            } else {
+                None
+            }
+        }
+        serde_json::Value::String(s) => Some(Value::String(s.clone())),
+        serde_json::Value::Array(arr) => {
+            let plist_arr: Vec<Value> = arr
+                .iter()
+                .filter_map(json_to_plist)
+                .collect();
+            Some(Value::Array(plist_arr))
+        }
+        serde_json::Value::Object(obj) => {
+            let mut plist_dict = plist::Dictionary::new();
+            for (key, val) in obj {
+                if let Some(plist_val) = json_to_plist(val) {
+                    plist_dict.insert(key.clone(), plist_val);
+                }
+            }
+            Some(Value::Dictionary(plist_dict))
+        }
+        serde_json::Value::Null => None,
+    }
+}
+
+/// Write extension settings to a separate plist file
+/// Extension settings go in: /Library/Managed Preferences/com.{browser}.extensions.{extension_id}.plist
+#[cfg(target_os = "macos")]
+pub fn write_extension_settings_plist(
+    browser_bundle_prefix: &str,
+    extension_id: &str,
+    settings: &std::collections::HashMap<String, serde_json::Value>,
+) -> Result<()> {
+    let bundle_id = format!("{}.extensions.{}", browser_bundle_prefix, extension_id);
+
+    let mut plist_updates = HashMap::new();
+    for (key, value) in settings {
+        if let Some(plist_value) = json_to_plist(value) {
+            plist_updates.insert(key.clone(), plist_value);
+        } else {
+            tracing::warn!("Could not convert setting {} to plist value", key);
+        }
+    }
+
+    write_plist_policy(&bundle_id, plist_updates)
+}
+
+/// Remove extension settings plist file
+#[cfg(target_os = "macos")]
+pub fn remove_extension_settings_plist(
+    browser_bundle_prefix: &str,
+    extension_id: &str,
+) -> Result<()> {
+    let bundle_id = format!("{}.extensions.{}", browser_bundle_prefix, extension_id);
+    remove_plist(&bundle_id)
+}
+
+/// Remove all extension settings plists for a browser
+/// Removes all plists matching: /Library/Managed Preferences/{browser_bundle_prefix}.extensions.*.plist
+#[cfg(target_os = "macos")]
+pub fn remove_all_extension_settings_plists(browser_bundle_prefix: &str) -> Result<()> {
+    let managed_prefs_dir = Path::new("/Library/Managed Preferences");
+
+    if !managed_prefs_dir.exists() {
+        return Ok(());
+    }
+
+    let pattern = format!("{}.extensions.", browser_bundle_prefix);
+
+    match std::fs::read_dir(managed_prefs_dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                if let Some(filename) = entry.file_name().to_str() {
+                    if filename.starts_with(&pattern) && filename.ends_with(".plist") {
+                        if let Err(e) = std::fs::remove_file(entry.path()) {
+                            tracing::warn!(
+                                "Failed to remove extension settings plist {}: {}",
+                                filename,
+                                e
+                            );
+                        } else {
+                            tracing::debug!("Removed extension settings plist: {}", filename);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e).with_context(|| {
+            format!(
+                "Failed to read Managed Preferences directory: {}",
+                managed_prefs_dir.display()
+            )
+        }),
+    }
+}
+
 /// Apply plist policy with dry-run support
 /// Shows what would change in dry-run mode, actually writes in normal mode
 #[cfg(target_os = "macos")]
