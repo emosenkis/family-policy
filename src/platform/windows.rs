@@ -233,6 +233,130 @@ pub fn apply_registry_value_with_preview(
     }
 }
 
+/// Write extension settings to registry
+/// Extension settings for Chromium browsers go under:
+/// HKLM\SOFTWARE\Policies\{Browser}\3rdparty\extensions\{extension_id}\policy
+///
+/// Settings can be:
+/// - Simple values (DWORD, String) written directly under 'policy' key
+/// - Array values written as numbered subkeys (1, 2, 3, ...) under named subkeys
+#[cfg(target_os = "windows")]
+pub fn write_extension_settings(
+    browser_policy_key: &str,
+    extension_id: &str,
+    settings: &std::collections::HashMap<String, serde_json::Value>,
+) -> Result<()> {
+    use serde_json::Value;
+
+    let policy_key_path = format!(
+        "{}\\3rdparty\\extensions\\{}\\policy",
+        browser_policy_key, extension_id
+    );
+
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+
+    // Create the policy key
+    let (policy_key, _) = hklm
+        .create_subkey(&policy_key_path)
+        .with_context(|| format!("Failed to create extension policy key: HKLM\\{}", policy_key_path))?;
+
+    // Write each setting
+    for (setting_name, value) in settings {
+        match value {
+            Value::Bool(b) => {
+                // Boolean values are written as DWORD (1 = true, 0 = false)
+                policy_key
+                    .set_value(setting_name, &(if *b { 1u32 } else { 0u32 }))
+                    .with_context(|| {
+                        format!(
+                            "Failed to set boolean setting {}: HKLM\\{}\\{}",
+                            setting_name, policy_key_path, setting_name
+                        )
+                    })?;
+            }
+            Value::Number(n) => {
+                // Numbers are written as DWORD
+                if let Some(val) = n.as_u64() {
+                    policy_key
+                        .set_value(setting_name, &(val as u32))
+                        .with_context(|| {
+                            format!(
+                                "Failed to set number setting {}: HKLM\\{}\\{}",
+                                setting_name, policy_key_path, setting_name
+                            )
+                        })?;
+                }
+            }
+            Value::String(s) => {
+                // String values are written as REG_SZ
+                policy_key.set_value(setting_name, s).with_context(|| {
+                    format!(
+                        "Failed to set string setting {}: HKLM\\{}\\{}",
+                        setting_name, policy_key_path, setting_name
+                    )
+                })?;
+            }
+            Value::Array(arr) => {
+                // Arrays are written as numbered values under a subkey
+                let array_key_path = format!("{}\\{}", policy_key_path, setting_name);
+
+                // Remove existing array subkey if it exists
+                let _ = hklm.delete_subkey_all(&array_key_path);
+
+                // Create the array subkey
+                let (array_key, _) = hklm
+                    .create_subkey(&array_key_path)
+                    .with_context(|| {
+                        format!(
+                            "Failed to create array key for {}: HKLM\\{}",
+                            setting_name, array_key_path
+                        )
+                    })?;
+
+                // Write array elements as numbered values (1, 2, 3, ...)
+                for (index, element) in arr.iter().enumerate() {
+                    let value_name = (index + 1).to_string();
+                    if let Value::String(s) = element {
+                        array_key.set_value(&value_name, s).with_context(|| {
+                            format!(
+                                "Failed to set array element {}: HKLM\\{}\\{}",
+                                value_name, array_key_path, value_name
+                            )
+                        })?;
+                    }
+                }
+            }
+            _ => {
+                tracing::warn!(
+                    "Unsupported setting type for {}: {:?}",
+                    setting_name,
+                    value
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Remove extension settings from registry
+#[cfg(target_os = "windows")]
+pub fn remove_extension_settings(browser_policy_key: &str, extension_id: &str) -> Result<()> {
+    let policy_key_path = format!(
+        "{}\\3rdparty\\extensions\\{}",
+        browser_policy_key, extension_id
+    );
+
+    match remove_registry_policy(&policy_key_path) {
+        Ok(_) => Ok(()),
+        Err(e) if e.to_string().contains("NotFound") => {
+            // Key doesn't exist - this is fine (idempotent)
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 #[cfg(test)]
 #[cfg(target_os = "windows")]
 mod tests {
