@@ -1,0 +1,59 @@
+{
+  "name": "Family Policy Development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "VARIANT": "jammy"
+    }
+  },
+  "remoteUser": "vscode",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "latest",
+      "profile": "default"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "serayuzgur.crates",
+        "vadimcn.vscode-lldb",
+        "Vue.volar",
+        "Vue.vscode-typescript-vue-plugin",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "rust-analyzer.checkOnSave.command": "clippy",
+        "editor.formatOnSave": true,
+        "[rust]": {
+          "editor.defaultFormatter": "rust-lang.rust-analyzer"
+        },
+        "[vue]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        }
+      }
+    }
+  },
+
+  "postCreateCommand": "pnpm install",
+
+  "mounts": [
+    "source=${localWorkspaceFolder}/.devcontainer/cache/cargo,target=/usr/local/cargo,type=bind,consistency=cached",
+    "source=${localWorkspaceFolder}/.devcontainer/cache/target,target=${containerWorkspaceFolder}/target,type=bind,consistency=cached"
+  ],
+
+  "remoteEnv": {
+    "CARGO_HOME": "/usr/local/cargo"
+  }
+}
