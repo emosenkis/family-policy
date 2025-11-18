@@ -7,6 +7,13 @@ homepage = "https://github.com/emosenkis/family-policy"
 license = "MIT OR Apache-2.0"
 authors = ["Family Policy Team"]
 
+[features]
+default = []
+ui = ["tauri", "tauri-plugin-opener"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [], optional = true }
+
 [dependencies]
 anyhow = "1.0.100"
 chrono = { version = "0.4.42", features = ["serde"] }
@@ -26,8 +33,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2.5.7"
 uuid = { version = "1", features = ["v4", "serde"] }
 
+# UI dependencies (optional)
+tauri = { version = "2", features = ["tray-icon"], optional = true }
+tauri-plugin-opener = { version = "2", optional = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.55.0"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"], optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 plist = "1.8.0"

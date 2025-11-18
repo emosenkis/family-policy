@@ -10,6 +10,9 @@ mod platform;
 mod policy;
 mod state;
 
+#[cfg(feature = "ui")]
+mod ui;
+
 use cli::{Args, Commands, ConfigCommands};
 
 fn main() {
@@ -55,6 +58,10 @@ fn run() -> Result<()> {
         }
         Some(Commands::ShowConfig) => {
             commands::agent::show_config(args.verbose)
+        }
+        #[cfg(feature = "ui")]
+        Some(Commands::Ui) => {
+            ui::run()
         }
     }
 }
