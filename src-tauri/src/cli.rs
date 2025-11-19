@@ -59,7 +59,6 @@ pub enum Commands {
     /// Show currently applied configuration
     ShowConfig,
     /// Launch the graphical settings UI (requires admin privileges)
-    #[cfg(feature = "ui")]
     Ui,
 }
 
