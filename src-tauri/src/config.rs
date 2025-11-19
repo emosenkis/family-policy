@@ -20,9 +20,9 @@ pub struct PolicyEntry {
 
     // Privacy controls (apply to all browsers, with browser-specific translations)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub disable_private_mode: Option<bool>,  // Chrome: incognito, Firefox: private browsing, Edge: InPrivate
+    pub disable_private_mode: Option<bool>, // Chrome: incognito, Firefox: private browsing, Edge: InPrivate
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub disable_guest_mode: Option<bool>,    // Chrome and Edge only (ignored for Firefox)
+    pub disable_guest_mode: Option<bool>, // Chrome and Edge only (ignored for Firefox)
 
     // Extensions
     #[serde(default)]
@@ -36,7 +36,7 @@ pub struct ExtensionEntry {
     pub id: BrowserIdMap,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub force_installed: Option<bool>,  // Default: true
+    pub force_installed: Option<bool>, // Default: true
 
     /// Arbitrary extension-specific settings (e.g., for uBO Lite)
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -182,7 +182,10 @@ fn validate_extension_entry(ext: &ExtensionEntry, browsers: &[Browser]) -> Resul
                     );
                 }
 
-                if !id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) {
+                if !id
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+                {
                     anyhow::bail!(
                         "Extension '{}' has invalid {} ID: must contain only lowercase letters and digits",
                         ext.name,
@@ -203,7 +206,13 @@ fn validate_extension_entry(ext: &ExtensionEntry, browsers: &[Browser]) -> Resul
 }
 
 /// Convert the new config format to browser-specific configurations
-pub fn to_browser_configs(config: &Config) -> (Option<ChromeConfig>, Option<FirefoxConfig>, Option<EdgeConfig>) {
+pub fn to_browser_configs(
+    config: &Config,
+) -> (
+    Option<ChromeConfig>,
+    Option<FirefoxConfig>,
+    Option<EdgeConfig>,
+) {
     let mut chrome_extensions = Vec::new();
     let mut firefox_extensions = Vec::new();
     let mut edge_extensions = Vec::new();
@@ -252,7 +261,9 @@ pub fn to_browser_configs(config: &Config) -> (Option<ChromeConfig>, Option<Fire
                         id: id.to_string(),
                         name: ext_entry.name.clone(),
                         update_url: match browser {
-                            Browser::Chrome | Browser::Edge => Some(DEFAULT_CHROME_UPDATE_URL.to_string()),
+                            Browser::Chrome | Browser::Edge => {
+                                Some(DEFAULT_CHROME_UPDATE_URL.to_string())
+                            }
                             Browser::Firefox => None,
                         },
                         install_url: match browser {
@@ -272,7 +283,10 @@ pub fn to_browser_configs(config: &Config) -> (Option<ChromeConfig>, Option<Fire
         }
     }
 
-    let chrome_config = if !chrome_extensions.is_empty() || chrome_disable_incognito.is_some() || chrome_disable_guest_mode.is_some() {
+    let chrome_config = if !chrome_extensions.is_empty()
+        || chrome_disable_incognito.is_some()
+        || chrome_disable_guest_mode.is_some()
+    {
         Some(ChromeConfig {
             extensions: chrome_extensions,
             disable_incognito: chrome_disable_incognito,
@@ -282,16 +296,20 @@ pub fn to_browser_configs(config: &Config) -> (Option<ChromeConfig>, Option<Fire
         None
     };
 
-    let firefox_config = if !firefox_extensions.is_empty() || firefox_disable_private_browsing.is_some() {
-        Some(FirefoxConfig {
-            extensions: firefox_extensions,
-            disable_private_browsing: firefox_disable_private_browsing,
-        })
-    } else {
-        None
-    };
+    let firefox_config =
+        if !firefox_extensions.is_empty() || firefox_disable_private_browsing.is_some() {
+            Some(FirefoxConfig {
+                extensions: firefox_extensions,
+                disable_private_browsing: firefox_disable_private_browsing,
+            })
+        } else {
+            None
+        };
 
-    let edge_config = if !edge_extensions.is_empty() || edge_disable_inprivate.is_some() || edge_disable_guest_mode.is_some() {
+    let edge_config = if !edge_extensions.is_empty()
+        || edge_disable_inprivate.is_some()
+        || edge_disable_guest_mode.is_some()
+    {
         Some(EdgeConfig {
             extensions: edge_extensions,
             disable_inprivate: edge_disable_inprivate,
@@ -315,7 +333,7 @@ fn generate_firefox_install_url(id: &str) -> String {
 /// Example configuration file with comprehensive documentation
 ///
 /// The content is loaded from example-config.yaml at compile time
-pub const EXAMPLE_CONFIG: &str = include_str!("../example-config.yaml");
+pub const EXAMPLE_CONFIG: &str = include_str!("../../example-config.yaml");
 
 #[cfg(test)]
 mod tests {
@@ -334,9 +352,7 @@ mod tests {
 
     #[test]
     fn config_with_no_policies_fails_validation() {
-        let config = Config {
-            policies: vec![],
-        };
+        let config = Config { policies: vec![] };
         assert!(validate_config(&config).is_err());
     }
 
@@ -543,9 +559,15 @@ policies:
         assert!(firefox.is_some());
         assert!(edge.is_some());
 
-        assert_eq!(chrome.unwrap().extensions[0].id, "ddkjiahejlhfcafbddmgiahcphecmpfh");
+        assert_eq!(
+            chrome.unwrap().extensions[0].id,
+            "ddkjiahejlhfcafbddmgiahcphecmpfh"
+        );
         assert_eq!(firefox.unwrap().extensions[0].id, "test@example.com");
-        assert_eq!(edge.unwrap().extensions[0].id, "ddkjiahejlhfcafbddmgiahcphecmpfh");
+        assert_eq!(
+            edge.unwrap().extensions[0].id,
+            "ddkjiahejlhfcafbddmgiahcphecmpfh"
+        );
     }
 
     #[test]

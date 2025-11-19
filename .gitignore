@@ -1,4 +1,8 @@
-/target
+/src-tauri/target
+target
+dist
+.pnpm-store
+*.swp
 
 # User's config file (use example-config.yaml as template)
 /family-policy.yaml
