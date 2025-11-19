@@ -4,7 +4,7 @@
 // for policy changes. Agents poll a raw GitHub URL, use ETag for efficiency,
 // and automatically apply policies when changes are detected.
 
-mod config;
+pub mod config;
 mod daemon;
 mod poller;
 mod scheduler;
