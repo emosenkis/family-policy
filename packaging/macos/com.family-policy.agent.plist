@@ -8,7 +8,6 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/family-policy</string>
-        <string>agent</string>
         <string>start</string>
         <string>--no-daemon</string>
     </array>

@@ -22,9 +22,32 @@ pub fn install_service(verbose: bool) -> Result<()> {
 
     #[cfg(target_os = "linux")]
     {
-        // For Linux, use systemctl
-        println!("Enabling systemd service...");
+        // Embed systemd service file in binary
+        const SERVICE_FILE: &str = include_str!("../../../packaging/linux/family-policy-agent.service");
 
+        // Copy systemd service file
+        println!("Installing systemd service file...");
+        let service_path = "/etc/systemd/system/family-policy-agent.service";
+        std::fs::write(service_path, SERVICE_FILE)
+            .context("Failed to write systemd service file")?;
+
+        println!("✓ Service file installed");
+
+        // Reload systemd daemon
+        println!("Reloading systemd daemon...");
+        let output = std::process::Command::new("systemctl")
+            .arg("daemon-reload")
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to reload systemd: {}", error);
+        }
+
+        println!("✓ Systemd reloaded");
+
+        // Enable the service
+        println!("Enabling systemd service...");
         let output = std::process::Command::new("systemctl")
             .arg("enable")
             .arg("family-policy-agent")
@@ -48,10 +71,38 @@ pub fn install_service(verbose: bool) -> Result<()> {
 
     #[cfg(target_os = "macos")]
     {
-        // For macOS, use launchctl
-        println!("Loading LaunchDaemon...");
+        // Embed LaunchDaemon plist in binary
+        const PLIST_FILE: &str = include_str!("../../../packaging/macos/com.family-policy.agent.plist");
 
+        // Copy LaunchDaemon plist file
+        println!("Installing LaunchDaemon plist...");
         let plist_path = "/Library/LaunchDaemons/com.family-policy.agent.plist";
+        std::fs::write(plist_path, PLIST_FILE)
+            .context("Failed to write LaunchDaemon plist")?;
+
+        println!("✓ Plist file installed");
+
+        // Set proper permissions (owned by root, readable by all)
+        let output = std::process::Command::new("chown")
+            .args(&["root:wheel", plist_path])
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            eprintln!("Warning: Failed to set plist ownership: {}", error);
+        }
+
+        let output = std::process::Command::new("chmod")
+            .args(&["644", plist_path])
+            .output()?;
+
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr);
+            eprintln!("Warning: Failed to set plist permissions: {}", error);
+        }
+
+        // Load the LaunchDaemon
+        println!("Loading LaunchDaemon...");
         let output = std::process::Command::new("launchctl")
             .arg("load")
             .arg(plist_path)
@@ -164,6 +215,20 @@ pub fn uninstall_service(verbose: bool) -> Result<()> {
         } else {
             println!("✓ Service disabled");
         }
+
+        // Remove service file
+        println!("Removing service file...");
+        let service_path = "/etc/systemd/system/family-policy-agent.service";
+        if std::path::Path::new(service_path).exists() {
+            std::fs::remove_file(service_path)
+                .context("Failed to remove service file")?;
+            println!("✓ Service file removed");
+
+            // Reload systemd daemon
+            let _ = std::process::Command::new("systemctl")
+                .arg("daemon-reload")
+                .output();
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -181,6 +246,14 @@ pub fn uninstall_service(verbose: bool) -> Result<()> {
             println!("Warning: Failed to unload LaunchDaemon: {}", error);
         } else {
             println!("✓ LaunchDaemon unloaded");
+        }
+
+        // Remove plist file
+        println!("Removing plist file...");
+        if std::path::Path::new(plist_path).exists() {
+            std::fs::remove_file(plist_path)
+                .context("Failed to remove plist file")?;
+            println!("✓ Plist file removed");
         }
     }
 
