@@ -13,14 +13,16 @@ The application applies OS-specific policies (Windows registry, macOS plists, Li
 
 ## Build and Test Commands
 
+This is a Tauri application with a Vue frontend and Rust backend. **All build commands must be run inside the devcontainer.**
+
 ```bash
-# Build the project
-cargo build
+# Build the project (must be run in devcontainer, takes several minutes)
+devcontainer exec --workspace-folder /var/home/eitan/projects/family-policy pnpm tauri build --bundles appimage
 
-# Build release version
-cargo build --release
+# Start the devcontainer first (if not already running)
+devcontainer up --workspace-folder /var/home/eitan/projects/family-policy
 
-# Run all tests (some require sudo/admin privileges)
+# Run tests (some require sudo/admin privileges)
 cargo test
 
 # Run tests with privileges (Linux/macOS)
@@ -42,6 +44,8 @@ family-policy --dry-run --config browser-policy.yaml
 # Remove all policies (local mode)
 sudo family-policy --uninstall
 ```
+
+**Note:** The build output will be at `src-tauri/target/release/bundle/appimage/Family Policy_0.1.0_amd64.AppImage`
 
 ## Getting Started
 
