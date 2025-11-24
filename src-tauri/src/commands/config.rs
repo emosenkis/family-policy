@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::fs;
 
-use crate::cli::ConfigCommands;
 use crate::config::EXAMPLE_CONFIG;
 
 /// Initialize a new configuration file

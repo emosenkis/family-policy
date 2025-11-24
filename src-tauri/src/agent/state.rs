@@ -1,7 +1,7 @@
 // Re-export State and related functionality from the main state module
 // Agent mode and local mode now use the same unified state type
 
-pub use crate::state::{State, load_state, save_state, delete_state, get_state_path};
+pub use crate::state::State;
 
 #[cfg(test)]
 mod tests {
