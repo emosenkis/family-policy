@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Agent configuration
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AgentConfig {
     pub github: GitHubConfig,
     pub agent: AgentSettings,
@@ -14,7 +14,7 @@ pub struct AgentConfig {
 }
 
 /// GitHub repository settings
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct GitHubConfig {
     /// Raw file URL to poll
     pub policy_url: String,
@@ -130,8 +130,7 @@ impl AgentConfig {
         }
 
         // Serialize to TOML
-        let toml = toml::to_string_pretty(self)
-            .context("Failed to serialize config")?;
+        let toml = toml::to_string_pretty(self).context("Failed to serialize config")?;
 
         // Write to file
         fs::write(path, toml)
@@ -146,8 +145,7 @@ impl AgentConfig {
     /// Validate configuration
     pub fn validate(&self) -> Result<()> {
         // Validate policy URL
-        let url = url::Url::parse(&self.github.policy_url)
-            .context("Invalid policy URL")?;
+        let url = url::Url::parse(&self.github.policy_url).context("Invalid policy URL")?;
 
         // Ensure HTTPS only
         if url.scheme() != "https" {
@@ -155,7 +153,11 @@ impl AgentConfig {
         }
 
         // Validate it's a raw GitHub URL
-        if !url.host_str().map(|h| h.contains("github")).unwrap_or(false) {
+        if !url
+            .host_str()
+            .map(|h| h.contains("github"))
+            .unwrap_or(false)
+        {
             eprintln!("Warning: Policy URL doesn't appear to be a GitHub URL");
             eprintln!("  Expected: https://raw.githubusercontent.com/...");
             eprintln!("  Got: {}", url);
@@ -163,7 +165,10 @@ impl AgentConfig {
 
         // Validate poll interval
         if self.agent.poll_interval < 60 {
-            anyhow::bail!("Poll interval must be at least 60 seconds (got: {})", self.agent.poll_interval);
+            anyhow::bail!(
+                "Poll interval must be at least 60 seconds (got: {})",
+                self.agent.poll_interval
+            );
         }
 
         Ok(())
@@ -179,7 +184,9 @@ pub fn get_agent_config_path() -> Result<PathBuf> {
 
     #[cfg(target_os = "macos")]
     {
-        Ok(PathBuf::from("/Library/Application Support/family-policy/agent.conf"))
+        Ok(PathBuf::from(
+            "/Library/Application Support/family-policy/agent.conf",
+        ))
     }
 
     #[cfg(target_os = "windows")]
@@ -221,7 +228,8 @@ mod tests {
     fn agent_config_accepts_https() {
         let config = AgentConfig {
             github: GitHubConfig {
-                policy_url: "https://raw.githubusercontent.com/user/repo/main/policy.yaml".to_string(),
+                policy_url: "https://raw.githubusercontent.com/user/repo/main/policy.yaml"
+                    .to_string(),
                 access_token: None,
             },
             agent: AgentSettings::default(),
@@ -236,7 +244,8 @@ mod tests {
     fn agent_config_validates_poll_interval() {
         let config = AgentConfig {
             github: GitHubConfig {
-                policy_url: "https://raw.githubusercontent.com/user/repo/main/policy.yaml".to_string(),
+                policy_url: "https://raw.githubusercontent.com/user/repo/main/policy.yaml"
+                    .to_string(),
                 access_token: None,
             },
             agent: AgentSettings {

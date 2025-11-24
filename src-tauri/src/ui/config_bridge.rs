@@ -49,8 +49,10 @@ pub fn is_admin() -> bool {
     {
         // On Windows, check if running as administrator
         unsafe {
-            use windows_sys::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
             use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+            use windows_sys::Win32::Security::{
+                GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+            };
             use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
             let mut token: HANDLE = 0;
