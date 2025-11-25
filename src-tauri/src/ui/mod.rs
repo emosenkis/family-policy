@@ -78,7 +78,20 @@ pub fn run() -> anyhow::Result<()> {
         .invoke_handler(tauri::generate_handler![
             get_agent_config,
             save_agent_config,
-            check_admin_privileges
+            check_admin_privileges,
+            // User commands (no admin required)
+            user_commands::read_state,
+            user_commands::read_config_summary,
+            user_commands::preview_apply,
+            user_commands::check_admin,
+            user_commands::request_elevation,
+            // Admin commands (require admin privileges)
+            admin_commands::apply_policies,
+            admin_commands::remove_policies,
+            admin_commands::preview_removal,
+            admin_commands::validate_config,
+            admin_commands::save_config,
+            admin_commands::get_default_config
         ])
         .run(tauri::generate_context!())
         .map_err(|e| anyhow::anyhow!("Failed to run UI: {}", e))?;

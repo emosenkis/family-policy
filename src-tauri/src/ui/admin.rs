@@ -3,23 +3,17 @@ use crate::core::privileges;
 
 /// Run the Admin UI
 ///
-/// TODO: Phase 4 - Implement full Admin UI functionality
+/// Launches the Tauri UI application in Admin mode.
+/// Requires administrator privileges to save configuration changes.
 pub fn run() -> Result<()> {
-    // Verify admin privileges at startup
+    // Note: Admin privileges are checked within individual Tauri commands
+    // The UI will show warnings if not running as admin
     if !privileges::is_admin() {
-        return Err(anyhow::anyhow!(
-            "Admin UI requires administrator privileges.\n\
-             Please run with sudo (Linux/macOS) or as Administrator (Windows)."
-        ));
+        eprintln!("Warning: Not running with administrator privileges.");
+        eprintln!("You can view settings but cannot save changes.");
+        eprintln!("To enable saving, run with sudo (Linux/macOS) or as Administrator (Windows).");
+        eprintln!();
     }
 
-    eprintln!("Admin UI is not yet implemented.");
-    eprintln!("This feature will be available in Phase 4 of the implementation.");
-    eprintln!();
-    eprintln!("For now, please use the existing CLI commands:");
-    eprintln!("  - 'family-policy apply --config <file>' to apply policies");
-    eprintln!("  - 'family-policy apply --config <file> --dry-run' to preview changes");
-    eprintln!("  - 'family-policy --uninstall' to remove all policies");
-
-    anyhow::bail!("Admin UI not yet implemented")
+    super::run()
 }

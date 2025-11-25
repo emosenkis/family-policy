@@ -1,7 +1,26 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import UserStatus from "./components/UserStatus.vue";
 
+// Determine mode from URL query parameter or default to user mode
+const urlParams = new URLSearchParams(window.location.search);
+const initialMode = urlParams.get('mode') || 'user';
+const currentMode = ref<'user' | 'admin'>(initialMode as 'user' | 'admin');
+
+function switchMode(mode: 'user' | 'admin') {
+  currentMode.value = mode;
+  // Update URL without reload
+  const url = new URL(window.location.href);
+  url.searchParams.set('mode', mode);
+  window.history.pushState({}, '', url);
+}
+
+const pageTitle = computed(() => {
+  return currentMode.value === 'user' ? 'Family Policy Status' : 'Family Policy Admin';
+});
+
+// Admin mode - Agent Configuration
 interface AgentConfig {
   github: {
     policy_url: string;
@@ -45,7 +64,7 @@ const config = ref<AgentConfig>({
 });
 
 const isAdmin = ref(false);
-const loading = ref(true);
+const loading = ref(false);
 const saving = ref(false);
 const message = ref("");
 const messageType = ref<"success" | "error" | "">("");
@@ -96,157 +115,266 @@ function showMessage(msg: string, type: "success" | "error") {
 }
 
 onMounted(() => {
-  loadConfig();
+  if (currentMode.value === 'admin') {
+    loadConfig();
+  }
 });
 </script>
 
 <template>
-  <main class="container">
-    <h1>🛡️ Family Policy Settings</h1>
+  <div class="app-container">
+    <!-- Mode switcher -->
+    <nav class="mode-nav">
+      <button
+        :class="['mode-btn', { active: currentMode === 'user' }]"
+        @click="switchMode('user')"
+      >
+        👤 User View
+      </button>
+      <button
+        :class="['mode-btn', { active: currentMode === 'admin' }]"
+        @click="switchMode('admin')"
+      >
+        ⚙️ Admin Settings
+      </button>
+    </nav>
 
-    <div v-if="!isAdmin" class="warning-banner">
-      ⚠️ Administrator privileges required to save changes
-    </div>
+    <!-- User Mode -->
+    <UserStatus v-if="currentMode === 'user'" />
 
-    <div v-if="message" :class="['message', messageType]">
-      {{ message }}
-    </div>
+    <!-- Admin Mode - Agent Configuration -->
+    <main v-else class="container">
+      <h1>🛡️ {{ pageTitle }}</h1>
 
-    <div v-if="loading" class="loading">Loading configuration...</div>
-
-    <form v-else @submit.prevent="saveConfig" class="settings-form">
-      <section class="form-section">
-        <h2>GitHub Configuration</h2>
-        <div class="form-group">
-          <label for="policy-url">Policy URL *</label>
-          <input
-            id="policy-url"
-            v-model="config.github.policy_url"
-            type="url"
-            placeholder="https://raw.githubusercontent.com/user/repo/main/policy.yaml"
-            required
-          />
-          <small>Raw GitHub URL to the policy YAML file</small>
-        </div>
-        <div class="form-group">
-          <label for="access-token">Access Token (Optional)</label>
-          <input
-            id="access-token"
-            v-model="config.github.access_token"
-            type="password"
-            placeholder="ghp_..."
-          />
-          <small>Required for private repositories</small>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <h2>Agent Settings</h2>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="poll-interval">Poll Interval (seconds)</label>
-            <input
-              id="poll-interval"
-              v-model.number="config.agent.poll_interval"
-              type="number"
-              min="60"
-              required
-            />
-            <small>How often to check for changes (min: 60)</small>
-          </div>
-          <div class="form-group">
-            <label for="poll-jitter">Poll Jitter (seconds)</label>
-            <input
-              id="poll-jitter"
-              v-model.number="config.agent.poll_jitter"
-              type="number"
-              min="0"
-              required
-            />
-            <small>Random delay to prevent synchronized requests</small>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="retry-interval">Retry Interval (seconds)</label>
-            <input
-              id="retry-interval"
-              v-model.number="config.agent.retry_interval"
-              type="number"
-              min="1"
-              required
-            />
-          </div>
-          <div class="form-group">
-            <label for="max-retries">Max Retries</label>
-            <input
-              id="max-retries"
-              v-model.number="config.agent.max_retries"
-              type="number"
-              min="0"
-              required
-            />
-          </div>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <h2>Logging</h2>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="log-level">Log Level</label>
-            <select id="log-level" v-model="config.logging.level">
-              <option value="error">Error</option>
-              <option value="warn">Warning</option>
-              <option value="info">Info</option>
-              <option value="debug">Debug</option>
-              <option value="trace">Trace</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="log-file">Log File (Optional)</label>
-            <input
-              id="log-file"
-              v-model="config.logging.file"
-              type="text"
-              placeholder="/var/log/family-policy.log"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <h2>Security (Advanced)</h2>
-        <div class="form-group checkbox-group">
-          <label>
-            <input
-              type="checkbox"
-              v-model="config.security.require_signature"
-            />
-            Require GPG signature verification
-          </label>
-        </div>
-        <div v-if="config.security.require_signature" class="form-group">
-          <label for="trusted-key">Trusted GPG Key</label>
-          <input
-            id="trusted-key"
-            v-model="config.security.trusted_key"
-            type="text"
-            placeholder="GPG key fingerprint"
-          />
-        </div>
-      </section>
-
-      <div class="form-actions">
-        <button type="submit" :disabled="!isAdmin || saving" class="btn-primary">
-          {{ saving ? "Saving..." : "Save Settings" }}
-        </button>
+      <div v-if="!isAdmin" class="warning-banner">
+        ⚠️ Administrator privileges required to save changes
       </div>
-    </form>
-  </main>
+
+      <div v-if="message" :class="['message', messageType]">
+        {{ message }}
+      </div>
+
+      <div v-if="loading" class="loading">Loading configuration...</div>
+
+      <form v-else @submit.prevent="saveConfig" class="settings-form">
+        <section class="form-section">
+          <h2>GitHub Configuration</h2>
+          <div class="form-group">
+            <label for="policy-url">Policy URL *</label>
+            <input
+              id="policy-url"
+              v-model="config.github.policy_url"
+              type="url"
+              placeholder="https://raw.githubusercontent.com/user/repo/main/policy.yaml"
+              required
+            />
+            <small>Raw GitHub URL to the policy YAML file</small>
+          </div>
+          <div class="form-group">
+            <label for="access-token">Access Token (Optional)</label>
+            <input
+              id="access-token"
+              v-model="config.github.access_token"
+              type="password"
+              placeholder="ghp_..."
+            />
+            <small>Required for private repositories</small>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h2>Agent Settings</h2>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="poll-interval">Poll Interval (seconds)</label>
+              <input
+                id="poll-interval"
+                v-model.number="config.agent.poll_interval"
+                type="number"
+                min="60"
+                required
+              />
+              <small>How often to check for changes (min: 60)</small>
+            </div>
+            <div class="form-group">
+              <label for="poll-jitter">Poll Jitter (seconds)</label>
+              <input
+                id="poll-jitter"
+                v-model.number="config.agent.poll_jitter"
+                type="number"
+                min="0"
+                required
+              />
+              <small>Random delay to prevent synchronized requests</small>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="retry-interval">Retry Interval (seconds)</label>
+              <input
+                id="retry-interval"
+                v-model.number="config.agent.retry_interval"
+                type="number"
+                min="1"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label for="max-retries">Max Retries</label>
+              <input
+                id="max-retries"
+                v-model.number="config.agent.max_retries"
+                type="number"
+                min="0"
+                required
+              />
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h2>Logging</h2>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="log-level">Log Level</label>
+              <select id="log-level" v-model="config.logging.level">
+                <option value="error">Error</option>
+                <option value="warn">Warning</option>
+                <option value="info">Info</option>
+                <option value="debug">Debug</option>
+                <option value="trace">Trace</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="log-file">Log File (Optional)</label>
+              <input
+                id="log-file"
+                v-model="config.logging.file"
+                type="text"
+                placeholder="/var/log/family-policy.log"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h2>Security (Advanced)</h2>
+          <div class="form-group checkbox-group">
+            <label>
+              <input
+                type="checkbox"
+                v-model="config.security.require_signature"
+              />
+              Require GPG signature verification
+            </label>
+          </div>
+          <div v-if="config.security.require_signature" class="form-group">
+            <label for="trusted-key">Trusted GPG Key</label>
+            <input
+              id="trusted-key"
+              v-model="config.security.trusted_key"
+              type="text"
+              placeholder="GPG key fingerprint"
+            />
+          </div>
+        </section>
+
+        <div class="form-actions">
+          <button type="submit" :disabled="!isAdmin || saving" class="btn-primary">
+            {{ saving ? "Saving..." : "Save Settings" }}
+          </button>
+        </div>
+      </form>
+    </main>
+  </div>
 </template>
 
+<style>
+:root {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+
+  --text-color: #0f0f0f;
+  --bg-color: #f6f6f6;
+  --section-bg: #ffffff;
+  --heading-color: #0f0f0f;
+  --label-color: #333;
+  --help-text-color: #666;
+  --input-bg: #ffffff;
+  --input-border: #ddd;
+
+  color: var(--text-color);
+  background-color: var(--bg-color);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-color: #f6f6f6;
+    --bg-color: #1a1a1a;
+    --section-bg: #2f2f2f;
+    --heading-color: #f6f6f6;
+    --label-color: #e0e0e0;
+    --help-text-color: #aaa;
+    --input-bg: #1f1f1f;
+    --input-border: #444;
+  }
+}
+</style>
+
 <style scoped>
+.app-container {
+  min-height: 100vh;
+}
+
+.mode-nav {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--section-bg);
+  border-bottom: 1px solid var(--input-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.mode-btn {
+  padding: 10px 20px;
+  border: 1px solid var(--input-border);
+  background: var(--bg-color);
+  color: var(--text-color);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.mode-btn:hover {
+  background: var(--section-bg);
+  border-color: #396cd8;
+}
+
+.mode-btn.active {
+  background: #396cd8;
+  color: white;
+  border-color: #396cd8;
+}
+
 .warning-banner {
   background: #fff3cd;
   color: #856404;
@@ -279,6 +407,18 @@ onMounted(() => {
   text-align: center;
   padding: 40px;
   color: #666;
+}
+
+.container {
+  margin: 0;
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 24px;
 }
 
 .settings-form {
@@ -384,56 +524,13 @@ onMounted(() => {
   .form-row {
     grid-template-columns: 1fr;
   }
-}
-</style>
-<style>
-:root {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
 
-  --text-color: #0f0f0f;
-  --bg-color: #f6f6f6;
-  --section-bg: #ffffff;
-  --heading-color: #0f0f0f;
-  --label-color: #333;
-  --help-text-color: #666;
-  --input-bg: #ffffff;
-  --input-border: #ddd;
+  .mode-nav {
+    flex-direction: column;
+  }
 
-  color: var(--text-color);
-  background-color: var(--bg-color);
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding: 20px;
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-h1 {
-  text-align: center;
-  margin-bottom: 24px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text-color: #f6f6f6;
-    --bg-color: #1a1a1a;
-    --section-bg: #2f2f2f;
-    --heading-color: #f6f6f6;
-    --label-color: #e0e0e0;
-    --help-text-color: #aaa;
-    --input-bg: #1f1f1f;
-    --input-border: #444;
+  .mode-btn {
+    width: 100%;
   }
 }
 </style>
