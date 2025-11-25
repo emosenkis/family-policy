@@ -5,8 +5,10 @@ use tauri::{
 };
 
 pub mod admin;
+pub mod admin_commands;
 mod config_bridge;
 pub mod user;
+pub mod user_commands;
 
 use crate::agent::config::AgentConfig;
 
