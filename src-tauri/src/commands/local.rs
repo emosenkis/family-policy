@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use crate::browser;
 use crate::cli::Args;
 use crate::config;
-use crate::platform;
-use crate::policy;
+use crate::core;
 use crate::state;
 
 /// Local mode arguments
@@ -39,22 +38,7 @@ fn run_local(args: LocalArgs) -> Result<()> {
     println!("Platform: {}", browser::current_platform().name());
     println!();
 
-    // Check for admin privileges
-    if !args.dry_run {
-        if let Err(e) = platform::ensure_admin_privileges() {
-            eprintln!("Insufficient privileges: {:#}", e);
-            eprintln!();
-            eprintln!("This program requires administrator/root privileges to modify system policies.");
-
-            #[cfg(unix)]
-            eprintln!("Please run with sudo: sudo {}", std::env::args().next().unwrap());
-
-            #[cfg(windows)]
-            eprintln!("Please run this program as Administrator.");
-
-            std::process::exit(1);
-        }
-    }
+    // Note: Privilege checking is now done in main.rs before this function is called
 
     if args.uninstall {
         // Uninstall mode: Remove all policies
@@ -84,52 +68,64 @@ fn install_policies(args: &LocalArgs) -> Result<()> {
 
     println!();
 
-    // Load current state
+    // Load current state for diff comparison
     let current_state = state::load_state().context("Failed to load state")?;
 
-    // Check if config has changed
-    let config_hash = state::compute_config_hash(&config)?;
-    let needs_update = match &current_state {
-        Some(state) => state.config_hash != config_hash,
-        None => true,
-    };
-
-    if !needs_update && !args.dry_run {
-        println!("✓ No changes detected - configuration matches current state");
-        println!("  All policies are already applied as configured.");
-        return Ok(());
-    }
-
+    // Show diff preview in dry-run mode
     if args.dry_run {
         println!("DRY RUN MODE - No changes will be made");
         println!();
+
+        let diff = core::diff::generate_diff(&config, current_state.as_ref());
+        core::diff::print_diff(&diff);
+
+        return Ok(());
     }
 
-    // Apply policies
-    if !args.dry_run {
-        println!("Applying browser policies...");
-        println!();
-    }
+    // Apply policies using core module
+    println!("Applying browser policies...");
+    println!();
 
-    let applied_policies = policy::apply_policies(&config, current_state.as_ref(), args.dry_run)
+    let result = core::apply::apply_policies_from_config(&config, args.dry_run)
         .context("Failed to apply policies")?;
 
-    if !args.dry_run {
-        // Create new state
-        let new_state = state::create_state(&config, applied_policies)
-            .context("Failed to create state")?;
-
-        // Save state
-        state::save_state(&new_state).context("Failed to save state")?;
-
+    // Display results
+    if !result.changed {
+        println!("✓ No changes detected - configuration matches current state");
+        println!("  All policies are already applied as configured.");
+    } else {
         println!();
         println!("✓ All policies applied successfully");
         println!("  State saved to: {}", state::get_state_path()?.display());
+
+        println!();
+        println!("Summary:");
+        println!("  Chrome: {} extensions, {} privacy settings",
+            result.extensions_applied.chrome,
+            result.privacy_settings_applied.chrome);
+        println!("  Firefox: {} extensions, {} privacy settings",
+            result.extensions_applied.firefox,
+            result.privacy_settings_applied.firefox);
+        println!("  Edge: {} extensions, {} privacy settings",
+            result.extensions_applied.edge,
+            result.privacy_settings_applied.edge);
     }
 
-    println!();
-    println!("Summary:");
-    print_summary(&config);
+    if !result.errors.is_empty() {
+        println!();
+        println!("Errors encountered:");
+        for error in &result.errors {
+            eprintln!("  - {}", error);
+        }
+    }
+
+    if !result.warnings.is_empty() {
+        println!();
+        println!("Warnings:");
+        for warning in &result.warnings {
+            println!("  - {}", warning);
+        }
+    }
 
     Ok(())
 }
@@ -138,74 +134,48 @@ fn uninstall_policies(dry_run: bool) -> Result<()> {
     println!("Uninstalling browser policies...");
     println!();
 
-    // Load current state
-    let state = match state::load_state().context("Failed to load state")? {
-        Some(state) => state,
-        None => {
-            println!("No policies currently installed (state file not found)");
-            return Ok(());
-        }
-    };
+    // Use core module for removal
+    let result = core::apply::remove_all_policies(dry_run)
+        .context("Failed to remove policies")?;
 
     if dry_run {
         println!("DRY RUN MODE - No changes will be made");
         println!();
-
-        if state.applied_policies.chrome.is_some() {
-            println!("[DRY RUN] Would remove Chrome policies");
-        }
-        if state.applied_policies.firefox.is_some() {
-            println!("[DRY RUN] Would remove Firefox policies");
-        }
-        if state.applied_policies.edge.is_some() {
-            println!("[DRY RUN] Would remove Edge policies");
-        }
-
-        return Ok(());
+        println!("Would remove:");
+        println!("  Chrome: {} extensions, {} privacy settings",
+            result.extensions_removed.chrome,
+            result.privacy_settings_removed.chrome);
+        println!("  Firefox: {} extensions, {} privacy settings",
+            result.extensions_removed.firefox,
+            result.privacy_settings_removed.firefox);
+        println!("  Edge: {} extensions, {} privacy settings",
+            result.extensions_removed.edge,
+            result.privacy_settings_removed.edge);
+    } else {
+        println!();
+        println!("✓ All policies removed successfully");
+        println!();
+        println!("Removed:");
+        println!("  Chrome: {} extensions, {} privacy settings",
+            result.extensions_removed.chrome,
+            result.privacy_settings_removed.chrome);
+        println!("  Firefox: {} extensions, {} privacy settings",
+            result.extensions_removed.firefox,
+            result.privacy_settings_removed.firefox);
+        println!("  Edge: {} extensions, {} privacy settings",
+            result.extensions_removed.edge,
+            result.privacy_settings_removed.edge);
     }
 
-    // Remove policies
-    policy::remove_policies(&state).context("Failed to remove policies")?;
-
-    // Delete state file
-    state::delete_state().context("Failed to delete state file")?;
-
-    println!();
-    println!("✓ All policies removed successfully");
+    if !result.errors.is_empty() {
+        println!();
+        println!("Errors encountered:");
+        for error in &result.errors {
+            eprintln!("  - {}", error);
+        }
+    }
 
     Ok(())
 }
 
-fn print_summary(config: &config::Config) {
-    let (chrome, firefox, edge) = config::to_browser_configs(config);
-
-    if let Some(chrome) = chrome {
-        println!("  Chrome:");
-        println!("    Extensions: {}", chrome.extensions.len());
-        if chrome.disable_incognito == Some(true) {
-            println!("    Incognito mode: DISABLED");
-        }
-        if chrome.disable_guest_mode == Some(true) {
-            println!("    Guest mode: DISABLED");
-        }
-    }
-
-    if let Some(firefox) = firefox {
-        println!("  Firefox:");
-        println!("    Extensions: {}", firefox.extensions.len());
-        if firefox.disable_private_browsing == Some(true) {
-            println!("    Private browsing: DISABLED");
-        }
-    }
-
-    if let Some(edge) = edge {
-        println!("  Edge:");
-        println!("    Extensions: {}", edge.extensions.len());
-        if edge.disable_inprivate == Some(true) {
-            println!("    InPrivate mode: DISABLED");
-        }
-        if edge.disable_guest_mode == Some(true) {
-            println!("    Guest mode: DISABLED");
-        }
-    }
-}
+// Note: print_summary function removed - now using diff output and apply result
