@@ -97,47 +97,69 @@ Update CLI structure to support new subcommands and privilege checking.
 
 ---
 
-### Phase 3: User UI Implementation ✗
+### Phase 3: User UI Implementation ⚙️ (In Progress)
 
 Create User UI mode for status display and admin elevation.
 
-#### 3.1 Create User UI Module Structure ✗
-- [ ] Create `src-tauri/src/ui/user/` directory
-- [ ] Create `src-tauri/src/ui/user/mod.rs` with public interface
-- [ ] Create `src-tauri/src/ui/user/commands.rs` for Tauri commands
-- [ ] Create `src-tauri/src/ui/user/elevation.rs` for privilege elevation
-- [ ] Update `src-tauri/src/ui/mod.rs` to export user module
+**Status**: Backend Tauri commands complete (commit 1c5ec00)
+**Next**: Vue frontend components and window setup
 
-#### 3.2 Implement User UI Window Setup (`src/ui/user/mod.rs`) ✗
-- [ ] Implement `run_user_ui(systray_mode: bool) -> Result<()>`
-- [ ] Configure Tauri builder with user UI commands
-- [ ] Set up window configuration (size, title, etc.)
-- [ ] Implement systray mode (icon, menu, click handlers)
-- [ ] Implement window mode (standard window)
-- [ ] Handle window show/hide for systray mode
-- [ ] Add "Launch Admin Settings" menu item
-- [ ] Add "View Status" menu item
-- [ ] Add "Quit" menu item
+#### 3.1 Backend Tauri Commands ✓
+- [x] Create `src-tauri/src/ui/user_commands.rs` for User UI
+- [x] Create `src-tauri/src/ui/admin_commands.rs` for Admin UI
+- [x] Update `src-tauri/src/ui/mod.rs` to export command modules
+
+#### 3.2 User UI Tauri Commands (`user_commands.rs`) ✓
+- [x] Implement `read_state() -> Result<StateInfo, String>`
+  - [x] Read state file from standard location
+  - [x] Parse and format state information
+  - [x] Return extension counts and privacy settings
+  - [x] Handle missing state file gracefully
+- [x] Implement `read_config_summary(path) -> Result<ConfigSummary, String>`
+  - [x] Load and parse policy config
+  - [x] Return policy names, extension counts, browsers
+- [x] Implement `preview_apply(path) -> Result<PolicyDiff, String>`
+  - [x] Load policy config from provided path
+  - [x] Load current state
+  - [x] Use `core::diff::generate_diff()` to create diff
+  - [x] Return serialized diff with changes
+- [x] Implement `check_admin() -> Result<bool, String>`
+  - [x] Check if running with admin privileges
+- [x] Implement `request_elevation() -> Result<ElevationResult, String>`
+  - [x] Platform-specific elevation guidance
+  - [x] Returns instructions for sudo/Administrator restart
+- [x] Define comprehensive types: `StateInfo`, `ConfigSummary`, `BrowserCounts`
+- [x] Add error handling for all commands
+- [x] Add unit tests for helper functions
+
+#### 3.3 Admin UI Tauri Commands (`admin_commands.rs`) ✓
+- [x] Implement `apply_policies(path) -> Result<ApplyResult, String>`
+  - [x] Verify admin privileges
+  - [x] Apply policies using `core::apply`
+  - [x] Return detailed results
+- [x] Implement `remove_policies() -> Result<RemovalResult, String>`
+  - [x] Verify admin privileges
+  - [x] Remove all policies
+  - [x] Return removal counts
+- [x] Implement `preview_removal() -> Result<RemovalResult, String>`
+  - [x] Preview what would be removed (no admin needed)
+- [x] Implement `validate_config(path) -> Result<ValidationResult, String>`
+  - [x] Validate YAML format and structure
+  - [x] Return errors and warnings
+- [x] Implement `save_config(path, yaml) -> Result<(), String>`
+  - [x] Check admin privileges for system paths
+  - [x] Validate before saving
+- [x] Implement `get_default_config() -> Result<String, String>`
+  - [x] Return example configuration YAML
+- [x] Define types: `ValidationResult`, `ElevationResult`
+- [x] Add unit tests for validation
+
+#### 3.4 Frontend Implementation ✗
+- [ ] Implement Vue components for User UI
+- [ ] Implement systray mode with Tauri
+- [ ] Implement window mode
+- [ ] Add "Launch Admin Settings" functionality
 - [ ] Test user UI startup on all platforms
-
-#### 3.3 Implement User UI Tauri Commands (`src/ui/user/commands.rs`) ✗
-- [ ] Implement `#[tauri::command] get_current_status() -> Result<StatusInfo, String>`
-  - [ ] Read state file from standard location
-  - [ ] Parse state JSON
-  - [ ] Return formatted status information
-  - [ ] Handle missing state file gracefully
-- [ ] Implement `#[tauri::command] get_policy_diff(policy_path: String) -> Result<PolicyDiff, String>`
-  - [ ] Load policy config from provided path
-  - [ ] Load current state
-  - [ ] Use `core::diff::generate_diff()` to create diff
-  - [ ] Return serialized diff
-- [ ] Implement `#[tauri::command] launch_admin_ui() -> Result<(), String>`
-  - [ ] Call `elevation::launch_admin_ui()`
-  - [ ] Handle errors gracefully
-  - [ ] Return success/failure
-- [ ] Define `StatusInfo` struct with state and daemon status
-- [ ] Add error handling for all commands
-- [ ] Add logging for user actions
 
 #### 3.4 Implement Platform-Specific Elevation (`src/ui/user/elevation.rs`) ✗
 - [ ] Implement Linux elevation with `pkexec`
