@@ -219,6 +219,19 @@ pub fn save_state(state: &State) -> Result<()> {
     crate::platform::common::atomic_write(&state_path, content.as_bytes())
         .with_context(|| format!("Failed to write state file: {}", state_path.display()))?;
 
+    // Set world-readable permissions (0o644 on Unix)
+    // This allows User UI (running as regular user) to read the state
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&state_path)
+            .context("Failed to get state file metadata")?
+            .permissions();
+        perms.set_mode(0o644); // rw-r--r-- (world-readable)
+        std::fs::set_permissions(&state_path, perms)
+            .context("Failed to set state file permissions")?;
+    }
+
     Ok(())
 }
 

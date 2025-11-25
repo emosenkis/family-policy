@@ -6,6 +6,7 @@ mod browser;
 mod cli;
 mod commands;
 mod config;
+mod core;
 mod platform;
 mod policy;
 mod state;
