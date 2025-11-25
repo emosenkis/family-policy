@@ -139,47 +139,12 @@ async fn check_and_apply_policy(config: &AgentConfig, dry_run: bool) -> Result<b
     }
 }
 
-/// Apply policy configuration using existing policy modules
+/// Apply policy configuration using policy module
 fn apply_policy_config(config: &config::Config, dry_run: bool) -> Result<AppliedPolicies> {
-    // Convert to browser-specific configs
-    let (chrome_config, firefox_config, edge_config) = config::to_browser_configs(config);
-
-    let mut applied = AppliedPolicies::default();
-
-    // Apply Chrome policies
-    if let Some(chrome) = chrome_config {
-        if dry_run {
-            tracing::info!("Would apply Chrome policies (dry-run)...");
-        } else {
-            tracing::info!("Applying Chrome policies...");
-        }
-        let state = policy::chrome::apply_chrome_policies(&chrome, dry_run)?;
-        applied.chrome = Some(state);
-    }
-
-    // Apply Firefox policies
-    if let Some(firefox) = firefox_config {
-        if dry_run {
-            tracing::info!("Would apply Firefox policies (dry-run)...");
-        } else {
-            tracing::info!("Applying Firefox policies...");
-        }
-        let state = policy::firefox::apply_firefox_policies(&firefox, dry_run)?;
-        applied.firefox = Some(state);
-    }
-
-    // Apply Edge policies
-    if let Some(edge) = edge_config {
-        if dry_run {
-            tracing::info!("Would apply Edge policies (dry-run)...");
-        } else {
-            tracing::info!("Applying Edge policies...");
-        }
-        let state = policy::edge::apply_edge_policies(&edge, dry_run)?;
-        applied.edge = Some(state);
-    }
-
-    Ok(applied)
+    // Use the centralized policy application logic
+    // Note: Agent maintains its own state, so we don't use core::apply here
+    policy::apply_policies(config, None, dry_run)
+        .context("Failed to apply policies")
 }
 
 /// Compute SHA-256 hash of YAML content

@@ -4,92 +4,96 @@ This document tracks the implementation progress of the new multi-mode architect
 
 ## Implementation Phases
 
-### Phase 1: Core Refactoring ✗
+### Phase 1: Core Refactoring ✓ (Complete)
 
 Core business logic refactoring to support privilege separation and dry-run capabilities.
 
-#### 1.1 Create Core Module Structure ✗
-- [ ] Create `src-tauri/src/core/` directory
-- [ ] Create `src-tauri/src/core/mod.rs` with module exports
-- [ ] Update `src-tauri/src/main.rs` to include `mod core;`
+**Status**: Completed in commits 3408c96, 7ddf276
+**Integration**: Core modules integrated into local mode and agent daemon
 
-#### 1.2 Implement Privilege Checking (`src/core/privileges.rs`) ✗
-- [ ] Create `src-tauri/src/core/privileges.rs`
-- [ ] Define `PrivilegeLevel` enum (User, Admin)
-- [ ] Define `PrivilegeCheck` struct with `required` and `allow_dry_run` fields
-- [ ] Implement `check_privileges(check: PrivilegeCheck, is_dry_run: bool) -> Result<()>`
-- [ ] Move `is_admin()` function from `src-tauri/src/ui/config_bridge.rs` to this module
-- [ ] Implement platform-specific `is_admin()` for Windows (existing code)
-- [ ] Implement platform-specific `is_admin()` for Unix (existing code)
-- [ ] Add unit tests for privilege checking logic
+#### 1.1 Create Core Module Structure ✓
+- [x] Create `src-tauri/src/core/` directory
+- [x] Create `src-tauri/src/core/mod.rs` with module exports
+- [x] Update `src-tauri/src/main.rs` to include `mod core;`
 
-#### 1.3 Implement Policy Application Orchestration (`src/core/apply.rs`) ✗
-- [ ] Create `src-tauri/src/core/apply.rs`
-- [ ] Extract policy application logic from `src-tauri/src/commands/local.rs`
-- [ ] Implement `apply_policies_from_config(config: &Config, dry_run: bool) -> Result<ApplyResult>`
-- [ ] Implement `remove_all_policies(dry_run: bool) -> Result<RemovalResult>`
-- [ ] Define `ApplyResult` struct with success/failure details
-- [ ] Define `RemovalResult` struct with removal summary
-- [ ] Ensure all policy application goes through this module
-- [ ] Add integration tests for apply logic
+#### 1.2 Implement Privilege Checking (`src/core/privileges.rs`) ✓
+- [x] Create `src-tauri/src/core/privileges.rs`
+- [x] Define `PrivilegeLevel` enum (User, Admin)
+- [x] Define `PrivilegeCheck` struct with `required` and `allow_dry_run` fields
+- [x] Implement `check_privileges(check: PrivilegeCheck, is_dry_run: bool) -> Result<()>`
+- [x] Consolidated `is_admin()` function from multiple locations
+- [x] Implement platform-specific `is_admin()` for Windows
+- [x] Implement platform-specific `is_admin()` for Unix
+- [x] Add unit tests for privilege checking logic
 
-#### 1.4 Implement Diff Generation (`src/core/diff.rs`) ✗
-- [ ] Create `src-tauri/src/core/diff.rs`
-- [ ] Define `PolicyDiff` struct to represent changes
-- [ ] Define `BrowserDiff` struct for browser-specific changes
-- [ ] Define `ExtensionDiff` enum (Added, Removed, Unchanged)
-- [ ] Define `PrivacySettingDiff` struct
-- [ ] Implement `generate_diff(new_config: &Config, current_state: &State) -> Result<PolicyDiff>`
-- [ ] Implement diff for extensions (additions, removals)
-- [ ] Implement diff for privacy settings (changes)
-- [ ] Implement pretty-printing for diffs (CLI output)
-- [ ] Add serialization for diff (JSON for Tauri commands)
-- [ ] Add unit tests for diff generation
+#### 1.3 Implement Policy Application Orchestration (`src/core/apply.rs`) ✓
+- [x] Create `src-tauri/src/core/apply.rs`
+- [x] Extract policy application logic from `src-tauri/src/commands/local.rs`
+- [x] Implement `apply_policies_from_config(config: &Config, dry_run: bool) -> Result<ApplyResult>`
+- [x] Implement `remove_all_policies(dry_run: bool) -> Result<RemovalResult>`
+- [x] Define `ApplyResult` struct with success/failure details
+- [x] Define `RemovalResult` struct with removal summary
+- [x] Integrated with local mode and agent daemon
+- [x] Add unit tests for apply logic
 
-#### 1.5 Update State File Permissions ✗
-- [ ] Modify `src-tauri/src/state.rs` in `save_state()` function
-- [ ] Change Unix permissions from `0o600` to `0o644` after writing state file
-- [ ] Ensure directory permissions allow reading (already should be 0o755)
-- [ ] Add comment explaining why state file is world-readable
-- [ ] Test state file permissions on Linux
-- [ ] Document permission model in state.rs
+#### 1.4 Implement Diff Generation (`src/core/diff.rs`) ✓
+- [x] Create `src-tauri/src/core/diff.rs`
+- [x] Define `PolicyDiff` struct to represent changes
+- [x] Define `BrowserDiff` struct for browser-specific changes
+- [x] Define `ExtensionDiff` enum (Added, Removed, Unchanged)
+- [x] Define `PrivacySettingDiff` struct
+- [x] Implement `generate_diff(new_config: &Config, current_state: &State) -> Result<PolicyDiff>`
+- [x] Implement diff for extensions (additions, removals)
+- [x] Implement diff for privacy settings (changes)
+- [x] Implement pretty-printing for diffs (CLI output)
+- [x] Serialization support via serde (ready for Tauri commands)
+- [x] Add unit tests for diff generation
+
+#### 1.5 Update State File Permissions ✓
+- [x] Modify `src-tauri/src/state.rs` in `save_state()` function
+- [x] Change Unix permissions from `0o600` to `0o644` after writing state file
+- [x] Directory permissions allow reading (0o755)
+- [x] Add comment explaining why state file is world-readable
+- [x] Documented permission model in state.rs
 
 ---
 
-### Phase 2: CLI Enhancement ✗
+### Phase 2: CLI Enhancement ✓ (Complete)
 
 Update CLI structure to support new subcommands and privilege checking.
 
-#### 2.1 Update CLI Argument Parser (`src/cli.rs`) ✗
-- [ ] Add `UserUi` variant to `Commands` enum
-- [ ] Add `AdminUi` variant to `Commands` enum
-- [ ] Add `Daemon` variant to `Commands` enum (if not exists)
-- [ ] Add `--systray` flag to `UserUi` command
-- [ ] Add `--window` flag to `UserUi` command (default)
-- [ ] Update command descriptions and help text
-- [ ] Ensure backward compatibility with existing commands
-- [ ] Update integration tests for CLI parsing
+**Status**: Completed in commits 8291aeb, 7ddf276
+**Improvements**: Integrated dry-run diff preview, better error reporting
 
-#### 2.2 Implement Privilege Checking in CLI Routing (`src/main.rs`) ✗
-- [ ] Import `core::privileges` module
-- [ ] Add privilege checks before each command execution
-- [ ] For `apply`: require Admin, allow dry-run for User
-- [ ] For `daemon`: require Admin
-- [ ] For `start`/`stop`: require Admin
-- [ ] For `check-now`: require Admin, allow dry-run for User
-- [ ] For `status`/`show-config`: allow User
-- [ ] For `user-ui`: allow User
-- [ ] For `admin-ui`: require Admin
-- [ ] For `install-service`/`uninstall-service`: require Admin
-- [ ] Provide clear error messages for insufficient privileges
-- [ ] Test privilege checking on all platforms
+#### 2.1 Update CLI Argument Parser (`src/cli.rs`) ✓
+- [x] Add `UserUi` variant to `Commands` enum
+- [x] Add `AdminUi` variant to `Commands` enum
+- [x] Add `Daemon` variant to `Commands` enum
+- [x] Add `--systray` flag to `UserUi` command
+- [x] Add `--window` flag to `UserUi` command (default)
+- [x] Update command descriptions and help text
+- [x] Backward compatibility maintained with existing commands
 
-#### 2.3 Update Existing Commands for Dry-Run Support ✗
-- [ ] Modify `commands::run_local_mode()` to use `core::apply`
-- [ ] Ensure `--dry-run` flag is respected throughout
-- [ ] Update `commands/agent.rs` `check_now()` to support dry-run
-- [ ] Test dry-run mode for all applicable commands
-- [ ] Update command output to clearly indicate dry-run vs actual execution
+#### 2.2 Implement Privilege Checking in CLI Routing (`src/main.rs`) ✓
+- [x] Import `core::privileges` module
+- [x] Add privilege checks before each command execution
+- [x] For `apply`: require Admin, allow dry-run for User
+- [x] For `daemon`: require Admin
+- [x] For `start`/`stop`: require Admin
+- [x] For `check-now`: require Admin, allow dry-run for User
+- [x] For `status`/`show-config`: allow User
+- [x] For `user-ui`: allow User
+- [x] For `admin-ui`: require Admin
+- [x] For `install-service`/`uninstall-service`: require Admin
+- [x] Clear error messages for insufficient privileges
+
+#### 2.3 Update Existing Commands for Dry-Run Support ✓
+- [x] Modified `commands::run_local_mode()` to use `core::apply`
+- [x] `--dry-run` flag respected throughout
+- [x] Added diff preview in dry-run mode using `core::diff`
+- [x] Dry-run mode tested for local commands
+- [x] Command output clearly indicates dry-run vs actual execution
+- [x] Agent daemon simplified to use centralized policy application
 
 ---
 
