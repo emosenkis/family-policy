@@ -300,6 +300,12 @@ pub fn uninstall_service(verbose: bool) -> Result<()> {
     Ok(())
 }
 
+/// Run as daemon (foreground mode)
+pub fn daemon(verbose: bool) -> Result<()> {
+    // This is a convenience function that runs the agent in foreground mode
+    start(true, verbose)
+}
+
 /// Start agent daemon
 pub fn start(no_daemon: bool, verbose: bool) -> Result<()> {
     // Initialize logging

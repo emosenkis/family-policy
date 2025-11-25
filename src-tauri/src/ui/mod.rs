@@ -4,7 +4,9 @@ use tauri::{
     AppHandle, Manager, Runtime,
 };
 
+pub mod admin;
 mod config_bridge;
+pub mod user;
 
 use crate::agent::config::AgentConfig;
 

@@ -40,11 +40,13 @@ pub enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
+    /// Run as daemon (foreground mode)
+    Daemon,
     /// Install agent as a system service
     InstallService,
     /// Uninstall agent system service
     UninstallService,
-    /// Start agent daemon
+    /// Start agent daemon (background)
     Start {
         /// Run in foreground (don't daemonize)
         #[arg(long)]
@@ -58,8 +60,18 @@ pub enum Commands {
     Status,
     /// Show currently applied configuration
     ShowConfig,
-    /// Launch the graphical settings UI (requires admin privileges)
-    Ui,
+    /// Launch User UI (no admin required)
+    UserUi {
+        /// Run in system tray mode
+        #[arg(long)]
+        systray: bool,
+
+        /// Run in window mode (default)
+        #[arg(long)]
+        window: bool,
+    },
+    /// Launch Admin UI (requires admin privileges)
+    AdminUi,
 }
 
 #[derive(Subcommand, Debug)]
