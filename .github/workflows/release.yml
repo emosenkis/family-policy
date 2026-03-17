@@ -5,370 +5,75 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version tag (e.g., v0.1.0)'
-        required: true
-        default: 'v0.1.0'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-linux:
-    name: Build Linux (x86_64)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  publish-tauri:
+    name: Build (${{ matrix.platform }})
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            args: ''
+          - platform: 'windows-latest'
+            args: ''
 
-      - name: Install Rust toolchain
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-gnu
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          workspaces: './src-tauri -> target'
 
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build release binary
-        run: cargo build --release --target x86_64-unknown-linux-gnu
-
-      - name: Upload Linux binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-linux-x86_64
-          path: target/x86_64-unknown-linux-gnu/release/family-policy
-
-  build-macos:
-    name: Build macOS (Universal)
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin,aarch64-apple-darwin
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build for Intel
-        run: cargo build --release --target x86_64-apple-darwin
-
-      - name: Build for Apple Silicon
-        run: cargo build --release --target aarch64-apple-darwin
-
-      - name: Create universal binary
-        run: |
-          mkdir -p target/universal-apple-darwin/release
-          lipo -create \
-            target/x86_64-apple-darwin/release/family-policy \
-            target/aarch64-apple-darwin/release/family-policy \
-            -output target/universal-apple-darwin/release/family-policy
-          chmod +x target/universal-apple-darwin/release/family-policy
-
-      - name: Build PKG installer
-        run: |
-          chmod +x packaging/macos/build-pkg.sh
-          # Pass the universal binary path to the build script
-          packaging/macos/build-pkg.sh target/universal-apple-darwin/release/family-policy
-
-      - name: Upload macOS binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-macos-universal
-          path: target/universal-apple-darwin/release/family-policy
-
-      - name: Upload PKG installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-pkg
-          path: dist/*.pkg
-
-  build-windows:
-    name: Build Windows (x86_64)
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build release binary
-        run: cargo build --release --target x86_64-pc-windows-msvc
-
-      - name: Upload Windows binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-windows-x86_64
-          path: target/x86_64-pc-windows-msvc/release/family-policy.exe
-
-      - name: Install WiX Toolset
-        run: |
-          # Download and install WiX Toolset v3.14.1
-          $wixUrl = "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip"
-          $wixZip = "$env:TEMP\wix314-binaries.zip"
-          $wixDir = "$env:TEMP\wix314"
-
-          Invoke-WebRequest -Uri $wixUrl -OutFile $wixZip
-          Expand-Archive -Path $wixZip -DestinationPath $wixDir -Force
-
-          # Add WiX to PATH
-          echo "$wixDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install cargo-wix
-        run: cargo install cargo-wix
-
-      - name: Build MSI package
-        run: cargo wix --no-build --nocapture --target x86_64-pc-windows-msvc
-
-      - name: Upload MSI package
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-msi
-          path: target/wix/*.msi
-
-      - name: Create ZIP archive (legacy)
-        run: |
-          mkdir -p dist
-          Copy-Item target/x86_64-pc-windows-msvc/release/family-policy.exe dist/
-          Copy-Item packaging/windows/install.ps1 dist/
-          Copy-Item packaging/windows/uninstall.ps1 dist/
-          Compress-Archive -Path dist/* -DestinationPath family-policy-windows-x86_64.zip
-
-      - name: Upload ZIP archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-windows-zip
-          path: family-policy-windows-x86_64.zip
-
-  build-ui-linux:
-    name: Build Tauri UI - Linux
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install system dependencies
+      - name: Install system dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.0-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libssl-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
             librsvg2-dev \
-            pango1.0-dev \
-            libgdk-pixbuf2.0-dev
+            patchelf
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: lts/*
 
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 8
 
-      - name: Build Tauri app
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: pnpm tauri
-
-      - name: Upload Linux UI artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-ui-linux
-          path: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
-
-  build-ui-macos:
-    name: Build Tauri UI - macOS
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
-
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        with:
-          tauriScript: pnpm tauri
-
-      - name: Upload macOS UI artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-ui-macos
-          path: |
-            src-tauri/target/release/bundle/dmg/*.dmg
-            src-tauri/target/release/bundle/macos/*.app
-
-  build-ui-windows:
-    name: Build Tauri UI - Windows
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 8
-
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
-        with:
-          tauriScript: pnpm tauri
-
-      - name: Upload Windows UI artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-policy-ui-windows
-          path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
-
-  create-release:
-    name: Create Release Assets
-    needs: [build-linux, build-macos, build-windows, build-ui-linux, build-ui-macos, build-ui-windows]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Display structure of downloaded files
-        run: ls -R artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-
-          # CLI binaries
-          cp artifacts/family-policy-linux-x86_64/family-policy release-assets/family-policy-linux-x86_64
-          chmod +x release-assets/family-policy-linux-x86_64
-
-          cp artifacts/family-policy-macos-universal/family-policy release-assets/family-policy-macos-universal
-          chmod +x release-assets/family-policy-macos-universal
-
-          cp artifacts/family-policy-windows-x86_64/family-policy.exe release-assets/family-policy-windows-x86_64.exe
-
-          # CLI packages
-          cp artifacts/family-policy-pkg/*.pkg release-assets/ || true
-          cp artifacts/family-policy-msi/*.msi release-assets/ || true
-          cp artifacts/family-policy-windows-zip/*.zip release-assets/ || true
-
-          # UI packages - Linux
-          find artifacts/family-policy-ui-linux -name "*.deb" -exec cp {} release-assets/ \; || true
-          find artifacts/family-policy-ui-linux -name "*.AppImage" -exec cp {} release-assets/ \; || true
-
-          # UI packages - macOS
-          find artifacts/family-policy-ui-macos -name "*.dmg" -exec cp {} release-assets/ \; || true
-          # Zip the .app bundle for easier distribution
-          if find artifacts/family-policy-ui-macos -name "*.app" -type d | grep -q .; then
-            cd artifacts/family-policy-ui-macos
-            find . -name "*.app" -type d -exec zip -r ../../release-assets/family-policy-ui-macos.app.zip {} \;
-            cd ../..
-          fi
-
-          # UI packages - Windows
-          find artifacts/family-policy-ui-windows -name "*.msi" -exec cp {} release-assets/ \; || true
-          find artifacts/family-policy-ui-windows -name "*.exe" -exec cp {} release-assets/ \; || true
-
-          # Create checksums
-          cd release-assets
-          sha256sum * > SHA256SUMS 2>/dev/null || true
-
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-assets/*
-          generate_release_notes: true
-          draft: false
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Family Policy {0}', github.ref_name) || '' }}
+          releaseBody: 'See the assets below to download and install this version.'
+          releaseDraft: false
           prerelease: false
+          generateReleaseNotes: true
+          args: ${{ matrix.args }}
