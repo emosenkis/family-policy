@@ -65,6 +65,7 @@ mod tests {
             extensions,
             disable_incognito: None,
             disable_guest_mode: None,
+            allow_deleting_browser_history: None,
         }
     }
 
@@ -74,6 +75,7 @@ mod tests {
         state.extensions = config.extensions.iter().map(|e| e.id.clone()).collect();
         state.disable_incognito = config.disable_incognito;
         state.disable_guest_mode = config.disable_guest_mode;
+        state.allow_deleting_browser_history = config.allow_deleting_browser_history;
         state
     }
 
@@ -86,6 +88,7 @@ mod tests {
             extensions: vec![ext1, ext2],
             disable_incognito: Some(true),
             disable_guest_mode: Some(true),
+            allow_deleting_browser_history: Some(false),
         };
 
         let state = build_chrome_state(&config);
@@ -95,6 +98,7 @@ mod tests {
         assert!(state.extensions.contains(&"extension2345678901234567890123".to_string()));
         assert_eq!(state.disable_incognito, Some(true));
         assert_eq!(state.disable_guest_mode, Some(true));
+        assert_eq!(state.allow_deleting_browser_history, Some(false));
     }
 
     #[test]
@@ -105,6 +109,7 @@ mod tests {
         assert!(state.extensions.is_empty());
         assert_eq!(state.disable_incognito, None);
         assert_eq!(state.disable_guest_mode, None);
+        assert_eq!(state.allow_deleting_browser_history, None);
     }
 
     #[test]
@@ -138,6 +143,7 @@ mod tests {
             extensions: vec![],
             disable_incognito: Some(true),
             disable_guest_mode: Some(false),
+            allow_deleting_browser_history: Some(false),
         };
 
         let state = build_chrome_state(&config);
@@ -145,6 +151,7 @@ mod tests {
         assert!(state.extensions.is_empty());
         assert_eq!(state.disable_incognito, Some(true));
         assert_eq!(state.disable_guest_mode, Some(false));
+        assert_eq!(state.allow_deleting_browser_history, Some(false));
     }
 
     #[test]
@@ -153,6 +160,7 @@ mod tests {
             extensions: vec![],
             disable_incognito: Some(true),
             disable_guest_mode: None,
+            allow_deleting_browser_history: None,
         };
 
         let state = build_chrome_state(&config);

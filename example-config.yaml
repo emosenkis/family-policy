@@ -23,6 +23,10 @@ policies:
     # Disable guest mode (Chrome and Edge only - ignored for Firefox)
     disable_guest_mode: true
 
+    # Allow deleting browser history (Chrome and Edge only - ignored for Firefox)
+    # Set to false to prevent users from clearing their browsing history
+    allow_deleting_browser_history: false
+
   # ============================================================================
   # Example 2: Simple Extension Installation
   # ============================================================================

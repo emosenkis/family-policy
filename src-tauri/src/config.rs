@@ -23,6 +23,8 @@ pub struct PolicyEntry {
     pub disable_private_mode: Option<bool>, // Chrome: incognito, Firefox: private browsing, Edge: InPrivate
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disable_guest_mode: Option<bool>, // Chrome and Edge only (ignored for Firefox)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_deleting_browser_history: Option<bool>, // Chrome: AllowDeletingBrowserHistory, Edge: AllowDeletingBrowserHistory
 
     // Extensions
     #[serde(default)]
@@ -68,6 +70,7 @@ pub struct ChromeConfig {
     pub extensions: Vec<Extension>,
     pub disable_incognito: Option<bool>,
     pub disable_guest_mode: Option<bool>,
+    pub allow_deleting_browser_history: Option<bool>,
 }
 
 /// Legacy Firefox-specific configuration (for internal use)
@@ -83,6 +86,7 @@ pub struct EdgeConfig {
     pub extensions: Vec<Extension>,
     pub disable_inprivate: Option<bool>,
     pub disable_guest_mode: Option<bool>,
+    pub allow_deleting_browser_history: Option<bool>,
 }
 
 /// Legacy extension definition (for internal use by policy modules)
@@ -219,9 +223,11 @@ pub fn to_browser_configs(
 
     let mut chrome_disable_incognito = None;
     let mut chrome_disable_guest_mode = None;
+    let mut chrome_allow_deleting_browser_history = None;
     let mut firefox_disable_private_browsing = None;
     let mut edge_disable_inprivate = None;
     let mut edge_disable_guest_mode = None;
+    let mut edge_allow_deleting_browser_history = None;
 
     // Process each policy entry
     for policy in &config.policies {
@@ -234,6 +240,9 @@ pub fn to_browser_configs(
                     }
                     if let Some(disable) = policy.disable_guest_mode {
                         chrome_disable_guest_mode = Some(disable);
+                    }
+                    if let Some(allow) = policy.allow_deleting_browser_history {
+                        chrome_allow_deleting_browser_history = Some(allow);
                     }
                 }
                 Browser::Firefox => {
@@ -248,6 +257,9 @@ pub fn to_browser_configs(
                     }
                     if let Some(disable) = policy.disable_guest_mode {
                         edge_disable_guest_mode = Some(disable);
+                    }
+                    if let Some(allow) = policy.allow_deleting_browser_history {
+                        edge_allow_deleting_browser_history = Some(allow);
                     }
                 }
             }
@@ -286,18 +298,22 @@ pub fn to_browser_configs(
     let chrome_config = if !chrome_extensions.is_empty()
         || chrome_disable_incognito.is_some()
         || chrome_disable_guest_mode.is_some()
+        || chrome_allow_deleting_browser_history.is_some()
     {
         Some(ChromeConfig {
             extensions: chrome_extensions,
             disable_incognito: chrome_disable_incognito,
             disable_guest_mode: chrome_disable_guest_mode,
+            allow_deleting_browser_history: chrome_allow_deleting_browser_history,
         })
     } else {
         None
     };
 
     let firefox_config =
-        if !firefox_extensions.is_empty() || firefox_disable_private_browsing.is_some() {
+        if !firefox_extensions.is_empty() 
+        || firefox_disable_private_browsing.is_some()
+    {
             Some(FirefoxConfig {
                 extensions: firefox_extensions,
                 disable_private_browsing: firefox_disable_private_browsing,
@@ -309,11 +325,13 @@ pub fn to_browser_configs(
     let edge_config = if !edge_extensions.is_empty()
         || edge_disable_inprivate.is_some()
         || edge_disable_guest_mode.is_some()
+        || edge_allow_deleting_browser_history.is_some()
     {
         Some(EdgeConfig {
             extensions: edge_extensions,
             disable_inprivate: edge_disable_inprivate,
             disable_guest_mode: edge_disable_guest_mode,
+            allow_deleting_browser_history: edge_allow_deleting_browser_history,
         })
     } else {
         None

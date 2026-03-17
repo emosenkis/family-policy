@@ -96,6 +96,8 @@ pub struct BrowserState {
     pub disable_private_browsing: Option<bool>, // Firefox only
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disable_guest_mode: Option<bool>, // Chrome/Edge only
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_deleting_browser_history: Option<bool>, // Chrome/Edge only
 }
 
 impl BrowserState {
@@ -107,6 +109,7 @@ impl BrowserState {
             disable_inprivate: None,
             disable_private_browsing: None,
             disable_guest_mode: None,
+            allow_deleting_browser_history: None,
         }
     }
 
@@ -117,6 +120,7 @@ impl BrowserState {
             && self.disable_inprivate.is_none()
             && self.disable_private_browsing.is_none()
             && self.disable_guest_mode.is_none()
+            && self.allow_deleting_browser_history.is_none()
     }
 }
 
@@ -301,6 +305,7 @@ mod tests {
                 browsers: vec![Browser::Chrome],
                 disable_private_mode: Some(true),
                 disable_guest_mode: None,
+                allow_deleting_browser_history: None,
                 extensions: vec![ExtensionEntry {
                     name: "Test".to_string(),
                     id: BrowserIdMap::Single("test123".to_string()),
@@ -318,6 +323,7 @@ mod tests {
             disable_inprivate: None,
             disable_private_browsing: None,
             disable_guest_mode: Some(false),
+            allow_deleting_browser_history: None,
         }
     }
 
@@ -422,6 +428,7 @@ mod tests {
                 browsers: vec![Browser::Chrome],
                 disable_private_mode: None,
                 disable_guest_mode: None,
+                allow_deleting_browser_history: None,
                 extensions: vec![],
             }],
         };
@@ -533,6 +540,7 @@ mod tests {
             disable_inprivate: None,
             disable_private_browsing: None,
             disable_guest_mode: None,
+            allow_deleting_browser_history: None,
         };
 
         let json = serde_json::to_string(&state).unwrap();
@@ -584,6 +592,7 @@ mod tests {
                 browsers: vec![Browser::Chrome, Browser::Firefox, Browser::Edge],
                 disable_private_mode: Some(true),
                 disable_guest_mode: Some(false),
+                allow_deleting_browser_history: None,
                 extensions: vec![],
             }],
         };
@@ -595,6 +604,7 @@ mod tests {
                 disable_inprivate: None,
                 disable_private_browsing: None,
                 disable_guest_mode: None,
+                allow_deleting_browser_history: None,
             }),
             firefox: Some(BrowserState {
                 extensions: vec![],
@@ -602,6 +612,7 @@ mod tests {
                 disable_inprivate: None,
                 disable_private_browsing: Some(true),
                 disable_guest_mode: None,
+                allow_deleting_browser_history: None,
             }),
             edge: Some(BrowserState {
                 extensions: vec![],
@@ -609,6 +620,7 @@ mod tests {
                 disable_inprivate: Some(true),
                 disable_private_browsing: None,
                 disable_guest_mode: Some(false),
+                allow_deleting_browser_history: None,
             }),
         };
 

@@ -29,6 +29,7 @@ pub struct ChromiumConfig {
     pub extensions: Vec<Extension>,
     pub disable_private_mode: Option<bool>,  // Incognito/InPrivate
     pub disable_guest_mode: Option<bool>,
+    pub allow_deleting_browser_history: Option<bool>,
 }
 
 impl ChromiumConfig {
@@ -38,6 +39,7 @@ impl ChromiumConfig {
             extensions: config.extensions.clone(),
             disable_private_mode: config.disable_incognito,
             disable_guest_mode: config.disable_guest_mode,
+            allow_deleting_browser_history: config.allow_deleting_browser_history,
         }
     }
 
@@ -47,6 +49,7 @@ impl ChromiumConfig {
             extensions: config.extensions.clone(),
             disable_private_mode: config.disable_inprivate,
             disable_guest_mode: config.disable_guest_mode,
+            allow_deleting_browser_history: config.allow_deleting_browser_history,
         }
     }
 }
@@ -78,6 +81,7 @@ pub fn apply_chromium_policies(
     state.disable_incognito = config.disable_private_mode;
     state.disable_inprivate = config.disable_private_mode;
     state.disable_guest_mode = config.disable_guest_mode;
+    state.allow_deleting_browser_history = config.allow_deleting_browser_history;
 
     Ok(state)
 }
@@ -231,6 +235,22 @@ fn apply_chromium_windows(
         })?;
     }
 
+    // Apply AllowDeletingBrowserHistory
+    if let Some(allow_deleting_history) = config.allow_deleting_browser_history {
+        apply_registry_value_with_preview(
+            browser_config.registry_key,
+            "AllowDeletingBrowserHistory",
+            RegistryValue::Dword(if allow_deleting_history { 1 } else { 0 }),
+            dry_run,
+        )
+        .with_context(|| {
+            format!(
+                "Failed to apply AllowDeletingBrowserHistory to {} registry",
+                browser_config.browser_name
+            )
+        })?;
+    }
+
     Ok(())
 }
 
@@ -289,6 +309,14 @@ fn apply_chromium_macos(
         updates.insert(
             "BrowserGuestModeEnabled".to_string(),
             bool_to_plist(!disable_guest_mode),
+        );
+    }
+
+    // Apply AllowDeletingBrowserHistory
+    if let Some(allow_deleting_history) = config.allow_deleting_browser_history {
+        updates.insert(
+            "AllowDeletingBrowserHistory".to_string(),
+            bool_to_plist(allow_deleting_history),
         );
     }
 
@@ -394,6 +422,11 @@ fn apply_chromium_linux(
         policy["BrowserGuestModeEnabled"] = json!(!disable_guest_mode);
     }
 
+    // Apply AllowDeletingBrowserHistory
+    if let Some(allow_deleting_history) = config.allow_deleting_browser_history {
+        policy["AllowDeletingBrowserHistory"] = json!(allow_deleting_history);
+    }
+
     // Apply extension settings if configured
     let mut has_extension_settings = false;
     let mut extensions_settings = serde_json::Map::new();
@@ -484,6 +517,14 @@ fn remove_chromium_windows(browser_config: &ChromiumBrowserConfig) -> Result<()>
         );
     }
 
+    if let Err(e) = remove_registry_value(browser_config.registry_key, "AllowDeletingBrowserHistory") {
+        tracing::warn!(
+            "Failed to remove {} AllowDeletingBrowserHistory: {}",
+            browser_config.browser_name,
+            e
+        );
+    }
+
     Ok(())
 }
 
@@ -507,6 +548,7 @@ fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
         "ExtensionInstallForcelist".to_string(),
         privacy_key.to_string(),
         "BrowserGuestModeEnabled".to_string(),
+        "AllowDeletingBrowserHistory".to_string(),
     ];
 
     remove_plist_keys(browser_config.bundle_id, &keys)
@@ -639,6 +681,7 @@ mod tests {
             extensions: vec![make_test_extension("test123")],
             disable_incognito: Some(true),
             disable_guest_mode: Some(false),
+            allow_deleting_browser_history: None,
         };
 
         let chromium_config = ChromiumConfig::from_chrome(&chrome_config);
@@ -654,6 +697,7 @@ mod tests {
             extensions: vec![make_test_extension("test456")],
             disable_inprivate: Some(true),
             disable_guest_mode: Some(true),
+            allow_deleting_browser_history: None,
         };
 
         let chromium_config = ChromiumConfig::from_edge(&edge_config);

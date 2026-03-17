@@ -209,6 +209,16 @@ fn generate_chrome_privacy_diff(
         });
     }
 
+    let old_history = current_state.and_then(|s| s.allow_deleting_browser_history);
+    let new_history = new_config.allow_deleting_browser_history;
+    if old_history != new_history {
+        diffs.push(PrivacySettingDiff {
+            setting_name: "Allow Deleting Browser History".to_string(),
+            old_value: old_history.map(|v| v.to_string()),
+            new_value: new_history.map(|v| v.to_string()),
+        });
+    }
+
     diffs
 }
 
@@ -254,6 +264,16 @@ fn generate_edge_privacy_diff(
             setting_name: "Disable Guest Mode".to_string(),
             old_value: old_guest.map(|v| v.to_string()),
             new_value: new_guest.map(|v| v.to_string()),
+        });
+    }
+
+    let old_history = current_state.and_then(|s| s.allow_deleting_browser_history);
+    let new_history = new_config.allow_deleting_browser_history;
+    if old_history != new_history {
+        diffs.push(PrivacySettingDiff {
+            setting_name: "Allow Deleting Browser History".to_string(),
+            old_value: old_history.map(|v| v.to_string()),
+            new_value: new_history.map(|v| v.to_string()),
         });
     }
 
@@ -384,6 +404,7 @@ mod tests {
             disable_inprivate: None,
             disable_private_browsing: None,
             disable_guest_mode: None,
+            allow_deleting_browser_history: None,
         };
 
         let diffs = generate_extension_diffs(&[], Some(&current_state));
@@ -413,6 +434,7 @@ mod tests {
             disable_inprivate: None,
             disable_private_browsing: None,
             disable_guest_mode: None,
+            allow_deleting_browser_history: None,
         };
 
         let diffs = generate_extension_diffs(&new_extensions, Some(&current_state));
@@ -432,6 +454,7 @@ mod tests {
             extensions: vec![],
             disable_incognito: Some(true),
             disable_guest_mode: Some(false),
+            allow_deleting_browser_history: None,
         };
 
         let current_state = BrowserState {
@@ -440,6 +463,7 @@ mod tests {
             disable_inprivate: None,
             disable_private_browsing: None,
             disable_guest_mode: None,
+            allow_deleting_browser_history: None,
         };
 
         let diffs = generate_chrome_privacy_diff(&new_config, Some(&current_state));

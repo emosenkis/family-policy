@@ -192,6 +192,9 @@ fn count_privacy_settings_chrome(state: &state::BrowserState) -> usize {
     if state.disable_guest_mode.is_some() {
         count += 1;
     }
+    if state.allow_deleting_browser_history.is_some() {
+        count += 1;
+    }
     count
 }
 
@@ -211,6 +214,9 @@ fn count_privacy_settings_edge(state: &state::BrowserState) -> usize {
     if state.disable_guest_mode.is_some() {
         count += 1;
     }
+    if state.allow_deleting_browser_history.is_some() {
+        count += 1;
+    }
     count
 }
 
@@ -227,6 +233,7 @@ mod tests {
             disable_inprivate: None,
             disable_private_browsing: None,
             disable_guest_mode: Some(false),
+            allow_deleting_browser_history: None,
         };
         assert_eq!(count_privacy_settings_chrome(&state), 2);
     }
@@ -239,6 +246,7 @@ mod tests {
             disable_inprivate: None,
             disable_private_browsing: Some(true),
             disable_guest_mode: None,
+            allow_deleting_browser_history: None,
         };
         assert_eq!(count_privacy_settings_firefox(&state), 1);
     }
@@ -251,6 +259,7 @@ mod tests {
             disable_inprivate: Some(true),
             disable_private_browsing: None,
             disable_guest_mode: Some(true),
+            allow_deleting_browser_history: None,
         };
         assert_eq!(count_privacy_settings_edge(&state), 2);
     }
