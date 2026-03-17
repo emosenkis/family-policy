@@ -62,7 +62,7 @@ jobs:
           version: 8
 
       - name: Install frontend dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
