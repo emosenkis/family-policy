@@ -12,26 +12,40 @@ use std::fs::OpenOptions;
 /// syncs to disk, then renames to the target path. This ensures
 /// the write is atomic on Unix and NTFS filesystems.
 pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
+    tracing::debug!(
+        "Preparing atomic write: target={}, bytes={}",
+        path.display(),
+        content.len()
+    );
+
     // Create parent directory if it doesn't exist
     if let Some(parent) = path.parent() {
+        tracing::debug!("Ensuring parent directory exists: {}", parent.display());
         ensure_directory_exists(parent)?;
     }
 
     // Create temporary file in same directory
     let temp_path = path.with_extension("tmp");
+    tracing::debug!("Writing temporary file: {}", temp_path.display());
 
     {
-        let mut file = File::create(&temp_path).with_context(|| {
-            format!("Failed to create temporary file: {}", temp_path.display())
-        })?;
+        let mut file = File::create(&temp_path)
+            .with_context(|| format!("Failed to create temporary file: {}", temp_path.display()))?;
 
         file.write_all(content)
             .context("Failed to write to temporary file")?;
+        tracing::debug!("Wrote {} bytes to temporary file", content.len());
 
         file.sync_all().context("Failed to sync file to disk")?;
+        tracing::debug!("Synced temporary file to disk: {}", temp_path.display());
     }
 
     // Rename to target path (atomic operation)
+    tracing::debug!(
+        "Renaming temporary file into place: {} -> {}",
+        temp_path.display(),
+        path.display()
+    );
     std::fs::rename(&temp_path, path).with_context(|| {
         format!(
             "Failed to rename {} to {}",
@@ -40,14 +54,19 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
         )
     })?;
 
+    tracing::debug!("Atomic write complete: {}", path.display());
+
     Ok(())
 }
 
 /// Ensure a directory exists, creating it and all parents if needed
 pub fn ensure_directory_exists(path: &Path) -> Result<()> {
     if !path.exists() {
+        tracing::debug!("Creating directory: {}", path.display());
         std::fs::create_dir_all(path)
             .with_context(|| format!("Failed to create directory: {}", path.display()))?;
+    } else {
+        tracing::debug!("Directory already exists: {}", path.display());
     }
 
     set_permissions_readable_all(path)?;
@@ -99,13 +118,15 @@ pub fn set_permissions_readable_all(path: &Path) -> Result<()> {
 
         let mut permissions = metadata.permissions();
 
-        if path.is_dir() {
+        let mode = if path.is_dir() {
             // 755 for directories (rwxr-xr-x)
-            permissions.set_mode(0o755);
+            0o755
         } else {
             // 644 for files (rw-r--r--)
-            permissions.set_mode(0o644);
-        }
+            0o644
+        };
+        permissions.set_mode(mode);
+        tracing::debug!("Setting permissions on {} to {:o}", path.display(), mode);
 
         std::fs::set_permissions(path, permissions)
             .with_context(|| format!("Failed to set permissions for: {}", path.display()))?;
@@ -152,7 +173,8 @@ pub fn apply_json_file_with_preview(
             println!("  Action: CREATE new file");
             println!();
             println!("  New content:");
-            let formatted = serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".to_string());
+            let formatted =
+                serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".to_string());
             for line in formatted.lines() {
                 println!("  + {}", line);
             }
@@ -165,8 +187,10 @@ pub fn apply_json_file_with_preview(
                 println!("  Diff:");
 
                 // Show a simple diff
-                let old_formatted = serde_json::to_string_pretty(&existing).unwrap_or_else(|_| "{}".to_string());
-                let new_formatted = serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".to_string());
+                let old_formatted =
+                    serde_json::to_string_pretty(&existing).unwrap_or_else(|_| "{}".to_string());
+                let new_formatted =
+                    serde_json::to_string_pretty(&data).unwrap_or_else(|_| "{}".to_string());
 
                 let old_lines: Vec<&str> = old_formatted.lines().collect();
                 let new_lines: Vec<&str> = new_formatted.lines().collect();
@@ -194,19 +218,69 @@ pub fn apply_json_file_with_preview(
         println!();
         Ok(())
     } else {
+        tracing::debug!("Applying JSON policy file: {}", file_path.display());
+
+        if file_path.exists() {
+            tracing::debug!("Existing JSON policy file found: {}", file_path.display());
+            match std::fs::read_to_string(file_path) {
+                Ok(existing_content) => {
+                    tracing::debug!(
+                        "Existing JSON policy content ({} bytes):\n{}",
+                        existing_content.len(),
+                        existing_content
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Could not read existing JSON policy file before writing {}: {}",
+                        file_path.display(),
+                        e
+                    );
+                }
+            }
+        } else {
+            tracing::debug!(
+                "JSON policy file does not exist yet: {}",
+                file_path.display()
+            );
+        }
+
         // Ensure parent directory exists
         if let Some(parent) = file_path.parent() {
             ensure_directory_exists(parent)?;
         }
 
         // Write JSON file
-        let content = serde_json::to_string_pretty(&data)
-            .context("Failed to serialize JSON")?;
+        let content = serde_json::to_string_pretty(&data).context("Failed to serialize JSON")?;
+        tracing::debug!(
+            "New JSON policy content ({} bytes) for {}:\n{}",
+            content.len(),
+            file_path.display(),
+            content
+        );
 
         atomic_write(file_path, content.as_bytes())
             .with_context(|| format!("Failed to write file: {}", file_path.display()))?;
 
         set_permissions_readable_all(file_path)?;
+
+        match std::fs::read_to_string(file_path) {
+            Ok(written_content) => {
+                tracing::debug!(
+                    "Verified JSON policy file after write ({} bytes) at {}:\n{}",
+                    written_content.len(),
+                    file_path.display(),
+                    written_content
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Could not read back JSON policy file after writing {}: {}",
+                    file_path.display(),
+                    e
+                );
+            }
+        }
 
         Ok(())
     }
@@ -287,7 +361,11 @@ mod tests {
     #[test]
     fn test_ensure_directory_exists() {
         let temp_dir = tempdir().unwrap();
-        let test_dir = temp_dir.path().join("test_ensure_dir").join("nested").join("path");
+        let test_dir = temp_dir
+            .path()
+            .join("test_ensure_dir")
+            .join("nested")
+            .join("path");
 
         ensure_directory_exists(&test_dir).unwrap();
         assert!(test_dir.exists());

@@ -40,6 +40,9 @@ sudo family-policy --config /path/to/config.yaml
 # Preview changes without applying (dry-run)
 family-policy --dry-run
 
+# Rewrite policies even if the saved state hash matches the config
+sudo family-policy --force-apply --verbose
+
 # Remove all policies
 sudo family-policy --uninstall
 
@@ -205,7 +208,8 @@ chrome:
 1. **Check privileges**: Ensure you're running as admin/root
 2. **Restart browsers**: Close all browser instances and reopen
 3. **Check state file**: Look at the state file to see what was applied
-4. **Use verbose mode**: Run with `--verbose` flag for more details
+4. **Use verbose mode**: Run with `--verbose` to log policy paths, generated values, and write verification
+5. **Force a rewrite**: Run with `--force-apply --verbose` if the state file says the config is unchanged but the browser policy file/registry value is missing or stale
 
 ### Uninstallation Issues
 

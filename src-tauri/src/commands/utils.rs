@@ -2,15 +2,14 @@ use chrono::Duration;
 
 /// Initialize logging
 pub fn init_logging(verbose: bool) {
-    use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
     let level = if verbose { "debug" } else { "info" };
 
-    tracing_subscriber::registry()
+    let _ = tracing_subscriber::registry()
         .with(fmt::layer())
-        .with(EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new(level)))
-        .init();
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level)))
+        .try_init();
 }
 
 /// Format duration for display
@@ -30,7 +29,10 @@ pub fn format_duration(duration: Duration) -> String {
 /// Print sudo message based on OS
 pub fn print_sudo_message() {
     #[cfg(unix)]
-    eprintln!("Please run with sudo: sudo {}", std::env::args().next().unwrap());
+    eprintln!(
+        "Please run with sudo: sudo {}",
+        std::env::args().next().unwrap()
+    );
 
     #[cfg(windows)]
     eprintln!("Please run this program as Administrator.");
