@@ -270,7 +270,7 @@ fn apply_chromium_windows(
     Ok(())
 }
 
-/// Apply Chromium policies on macOS (via plist)
+/// Apply Chromium policies on macOS (via configuration profile)
 #[cfg(target_os = "macos")]
 fn apply_chromium_macos(
     config: &ChromiumConfig,
@@ -278,7 +278,8 @@ fn apply_chromium_macos(
     dry_run: bool,
 ) -> Result<()> {
     use crate::platform::macos::{
-        apply_plist_policy_with_preview, bool_to_plist, integer_to_plist, string_vec_to_plist_array,
+        bool_to_plist, install_managed_preferences_profile_for_domains, integer_to_plist,
+        json_to_plist, string_vec_to_plist_array,
     };
     use std::collections::HashMap;
 
@@ -336,23 +337,42 @@ fn apply_chromium_macos(
         );
     }
 
-    apply_plist_policy_with_preview(browser_config.bundle_id, updates.clone(), dry_run)
-        .with_context(|| {
-            format!(
-                "Failed to apply {} plist policy",
-                browser_config.browser_name
-            )
-        })?;
+    let mut managed_domains = vec![(browser_config.bundle_id.to_string(), updates)];
 
-    // A raw file in /Library/Managed Preferences is useful for inspection and
-    // older local workflows, but current macOS releases and browser builds are
-    // most reliable when the same managed preferences are installed as a
-    // configuration profile. Without this, chrome://policy and edge://policy can
-    // show no active policies even though the plist file exists on disk.
-    crate::platform::macos::install_managed_preferences_profile(
+    for ext in &config.extensions {
+        if ext.settings.is_empty() {
+            continue;
+        }
+
+        let extension_domain = format!("{}.extensions.{}", browser_config.bundle_id, ext.id);
+        let mut extension_updates = HashMap::new();
+        for (key, value) in &ext.settings {
+            if let Some(plist_value) = json_to_plist(value) {
+                extension_updates.insert(key.clone(), plist_value);
+            } else {
+                tracing::warn!(
+                    "Could not convert setting {} for {} extension {} to plist value",
+                    key,
+                    browser_config.browser_name,
+                    ext.name
+                );
+            }
+        }
+
+        if !extension_updates.is_empty() {
+            tracing::debug!(
+                "Adding {} extension managed-storage profile domain: {}",
+                browser_config.browser_name,
+                extension_domain
+            );
+            managed_domains.push((extension_domain, extension_updates));
+        }
+    }
+
+    install_managed_preferences_profile_for_domains(
         browser_config.bundle_id,
         browser_config.browser_name,
-        updates,
+        managed_domains,
         dry_run,
     )
     .with_context(|| {
@@ -361,44 +381,6 @@ fn apply_chromium_macos(
             browser_config.browser_name
         )
     })?;
-
-    // Apply extension settings if configured
-    if !dry_run {
-        for ext in &config.extensions {
-            if !ext.settings.is_empty() {
-                use crate::platform::macos::write_extension_settings_plist;
-
-                write_extension_settings_plist(browser_config.bundle_id, &ext.id, &ext.settings)
-                    .with_context(|| {
-                        format!(
-                            "Failed to apply settings for {} extension {}",
-                            browser_config.browser_name, ext.name
-                        )
-                    })?;
-
-                tracing::debug!(
-                    "Applied settings for {} extension: {}",
-                    browser_config.browser_name,
-                    ext.name
-                );
-            }
-        }
-    } else {
-        // Show extension settings in dry-run mode
-        for ext in &config.extensions {
-            if !ext.settings.is_empty() {
-                println!(
-                    "Extension Settings Plist: /Library/Managed Preferences/{}.extensions.{}.plist",
-                    browser_config.bundle_id, ext.id
-                );
-                println!("  Extension: {}", ext.name);
-                for (key, value) in &ext.settings {
-                    println!("  + {}: {:?}", key, value);
-                }
-                println!();
-            }
-        }
-    }
 
     Ok(())
 }

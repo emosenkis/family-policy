@@ -72,20 +72,6 @@ pub fn write_plist_policy(bundle_id: &str, updates: HashMap<String, Value>) -> R
     write_plist_updates(&plist_path, updates)
 }
 
-/// Write or update a plist in /Library/Preferences.
-///
-/// Some browsers (notably Firefox on macOS) read command-line/defaults managed
-/// policy values from this preferences domain instead of the Managed Preferences
-/// file path used by Chrome-family browsers.
-#[cfg(target_os = "macos")]
-pub fn write_library_preferences_plist(
-    bundle_id: &str,
-    updates: HashMap<String, Value>,
-) -> Result<()> {
-    let plist_path = get_library_preferences_plist_path(bundle_id);
-    write_plist_updates(&plist_path, updates)
-}
-
 /// Install a managed preferences configuration profile for browsers that rely on
 /// macOS profiles to surface mandatory policies in their about:policies pages.
 #[cfg(target_os = "macos")]
@@ -95,21 +81,42 @@ pub fn install_managed_preferences_profile(
     policy_settings: HashMap<String, Value>,
     dry_run: bool,
 ) -> Result<()> {
-    let profile_path = get_profile_path(bundle_id);
+    install_managed_preferences_profile_for_domains(
+        bundle_id,
+        display_name,
+        vec![(bundle_id.to_string(), policy_settings)],
+        dry_run,
+    )
+}
+
+/// Install one configuration profile containing one or more managed preference
+/// domains. This is required for Chromium extension managed-storage policies,
+/// whose domain is separate from the browser's main policy domain.
+#[cfg(target_os = "macos")]
+pub fn install_managed_preferences_profile_for_domains(
+    profile_id: &str,
+    display_name: &str,
+    managed_domains: Vec<(String, HashMap<String, Value>)>,
+    dry_run: bool,
+) -> Result<()> {
+    let profile_path = get_profile_path(profile_id);
 
     if dry_run {
         println!("Configuration Profile: {}", profile_path.display());
-        println!("  Payload domain: {}", bundle_id);
+        println!("  Profile id: {}", profile_id);
         println!("  Display name: {}", display_name);
         println!("  Action: CREATE_OR_REPLACE managed preferences profile");
-        for key in policy_settings.keys() {
-            println!("  + Policy key: {}", key);
+        for (domain, settings) in &managed_domains {
+            println!("  Payload domain: {}", domain);
+            for key in settings.keys() {
+                println!("    + Policy key: {}", key);
+            }
         }
         println!();
         return Ok(());
     }
 
-    let profile = create_managed_preferences_profile(bundle_id, display_name, policy_settings);
+    let profile = create_managed_preferences_profile(profile_id, display_name, managed_domains);
     if let Some(parent) = profile_path.parent() {
         crate::platform::common::ensure_directory_exists(parent)?;
     }
@@ -129,15 +136,15 @@ pub fn install_managed_preferences_profile(
     crate::platform::common::set_permissions_readable_all(&profile_path)?;
 
     tracing::debug!(
-        "Installing macOS managed preferences profile for {} from {}",
-        bundle_id,
+        "Installing macOS managed preferences profile {} from {}",
+        profile_id,
         profile_path.display()
     );
 
     // Re-applying a profile with an existing PayloadIdentifier can fail on some
     // macOS releases, so remove our previous profile first. Ignore failures: the
     // profile may not exist yet, and the install below will report real errors.
-    let _ = remove_managed_preferences_profile(bundle_id);
+    let _ = remove_managed_preferences_profile(profile_id);
 
     match std::process::Command::new("/usr/bin/profiles")
         .args([
@@ -153,7 +160,7 @@ pub fn install_managed_preferences_profile(
         Ok(output) => {
             tracing::warn!(
                 "profiles install failed for {} (status: {}). stderr: {}. Retrying with legacy -I -F syntax.",
-                bundle_id,
+                profile_id,
                 output.status,
                 String::from_utf8_lossy(&output.stderr)
             );
@@ -167,7 +174,7 @@ pub fn install_managed_preferences_profile(
             } else {
                 anyhow::bail!(
                     "Failed to install macOS configuration profile for {}. profiles stderr: {}; legacy stderr: {}",
-                    bundle_id,
+                    profile_id,
                     String::from_utf8_lossy(&output.stderr),
                     String::from_utf8_lossy(&legacy_output.stderr)
                 );
@@ -179,8 +186,8 @@ pub fn install_managed_preferences_profile(
 
 /// Remove the configuration profile installed by install_managed_preferences_profile.
 #[cfg(target_os = "macos")]
-pub fn remove_managed_preferences_profile(bundle_id: &str) -> Result<()> {
-    let profile_identifier = format!("com.family-policy.browser.{}", bundle_id);
+pub fn remove_managed_preferences_profile(profile_id: &str) -> Result<()> {
+    let profile_identifier = format!("com.family-policy.browser.{}", profile_id);
     let output = std::process::Command::new("/usr/bin/profiles")
         .args(["remove", "-identifier", profile_identifier.as_str()])
         .output()
@@ -246,32 +253,34 @@ fn remove_plist_keys_at_path(plist_path: &Path, keys: &[String]) -> Result<()> {
 
 #[cfg(target_os = "macos")]
 fn create_managed_preferences_profile(
-    bundle_id: &str,
+    profile_id: &str,
     display_name: &str,
-    policy_settings: HashMap<String, Value>,
+    managed_domains: Vec<(String, HashMap<String, Value>)>,
 ) -> Value {
-    let profile_identifier = format!("com.family-policy.browser.{}", bundle_id);
+    let profile_identifier = format!("com.family-policy.browser.{}", profile_id);
     let payload_identifier = format!("{}.managed-preferences", profile_identifier);
 
-    let mut mcx_settings = plist::Dictionary::new();
-    for (key, value) in policy_settings {
-        mcx_settings.insert(key, value);
-    }
-
-    let mut forced_entry = plist::Dictionary::new();
-    forced_entry.insert(
-        "mcx_preference_settings".to_string(),
-        Value::Dictionary(mcx_settings),
-    );
-
-    let mut domain_payload = plist::Dictionary::new();
-    domain_payload.insert(
-        "Forced".to_string(),
-        Value::Array(vec![Value::Dictionary(forced_entry)]),
-    );
-
     let mut managed_content = plist::Dictionary::new();
-    managed_content.insert(bundle_id.to_string(), Value::Dictionary(domain_payload));
+    for (domain, settings) in managed_domains {
+        let mut mcx_settings = plist::Dictionary::new();
+        for (key, value) in settings {
+            mcx_settings.insert(key, value);
+        }
+
+        let mut forced_entry = plist::Dictionary::new();
+        forced_entry.insert(
+            "mcx_preference_settings".to_string(),
+            Value::Dictionary(mcx_settings),
+        );
+
+        let mut domain_payload = plist::Dictionary::new();
+        domain_payload.insert(
+            "Forced".to_string(),
+            Value::Array(vec![Value::Dictionary(forced_entry)]),
+        );
+
+        managed_content.insert(domain, Value::Dictionary(domain_payload));
+    }
 
     let mut managed_payload = plist::Dictionary::new();
     managed_payload.insert(
@@ -428,38 +437,6 @@ pub fn json_to_plist(value: &serde_json::Value) -> Option<Value> {
     }
 }
 
-/// Write extension settings to a separate plist file
-/// Extension settings go in: /Library/Managed Preferences/com.{browser}.extensions.{extension_id}.plist
-#[cfg(target_os = "macos")]
-pub fn write_extension_settings_plist(
-    browser_bundle_prefix: &str,
-    extension_id: &str,
-    settings: &std::collections::HashMap<String, serde_json::Value>,
-) -> Result<()> {
-    let bundle_id = format!("{}.extensions.{}", browser_bundle_prefix, extension_id);
-
-    let mut plist_updates = HashMap::new();
-    for (key, value) in settings {
-        if let Some(plist_value) = json_to_plist(value) {
-            plist_updates.insert(key.clone(), plist_value);
-        } else {
-            tracing::warn!("Could not convert setting {} to plist value", key);
-        }
-    }
-
-    write_plist_policy(&bundle_id, plist_updates)
-}
-
-/// Remove extension settings plist file
-#[cfg(target_os = "macos")]
-pub fn remove_extension_settings_plist(
-    browser_bundle_prefix: &str,
-    extension_id: &str,
-) -> Result<()> {
-    let bundle_id = format!("{}.extensions.{}", browser_bundle_prefix, extension_id);
-    remove_plist(&bundle_id)
-}
-
 /// Remove all extension settings plists for a browser
 /// Removes all plists matching: /Library/Managed Preferences/{browser_bundle_prefix}.extensions.*.plist
 #[cfg(target_os = "macos")]
@@ -498,91 +475,6 @@ pub fn remove_all_extension_settings_plists(browser_bundle_prefix: &str) -> Resu
                 managed_prefs_dir.display()
             )
         }),
-    }
-}
-
-/// Apply plist policy with dry-run support
-/// Shows what would change in dry-run mode, actually writes in normal mode
-#[cfg(target_os = "macos")]
-pub fn apply_plist_policy_with_preview(
-    bundle_id: &str,
-    updates: HashMap<String, Value>,
-    dry_run: bool,
-) -> Result<()> {
-    if dry_run {
-        let plist_path = format!("/Library/Managed Preferences/{}.plist", bundle_id);
-        println!("Plist File: {}", plist_path);
-
-        // Try to read existing plist
-        let existing_plist = if std::path::Path::new(&plist_path).exists() {
-            std::fs::File::open(&plist_path)
-                .ok()
-                .and_then(|f| plist::from_reader::<_, plist::Value>(f).ok())
-                .and_then(|v| {
-                    if let plist::Value::Dictionary(d) = v {
-                        Some(d)
-                    } else {
-                        None
-                    }
-                })
-        } else {
-            None
-        };
-
-        if existing_plist.is_none() {
-            println!("  Action: CREATE new plist file");
-        } else {
-            println!("  Action: UPDATE plist file");
-        }
-        println!();
-
-        // Show each key being added/updated
-        for (key, value) in &updates {
-            println!("  Key: {}", key);
-            if let Some(ref dict) = existing_plist {
-                if dict.contains_key(key) {
-                    println!("    Action: UPDATE");
-                } else {
-                    println!("    Action: ADD");
-                }
-            } else {
-                println!("    Action: ADD");
-            }
-
-            // Show type and value
-            match value {
-                Value::Array(_) => {
-                    println!("    + Type: Array");
-                    if let Value::Array(arr) = value {
-                        for item in arr {
-                            if let Value::String(s) = item {
-                                println!("      + {}", s);
-                            }
-                        }
-                    }
-                }
-                Value::Integer(i) => {
-                    println!("    + Type: Integer");
-                    println!("    + Value: {}", i);
-                }
-                Value::Boolean(b) => {
-                    println!("    + Type: Boolean");
-                    println!("    + Value: {}", b);
-                }
-                Value::String(s) => {
-                    println!("    + Type: String");
-                    println!("    + Value: {}", s);
-                }
-                _ => {
-                    println!("    + Type: Other");
-                }
-            }
-            println!();
-        }
-
-        Ok(())
-    } else {
-        write_plist_policy(bundle_id, updates)
     }
 }
 

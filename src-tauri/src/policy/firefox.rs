@@ -7,13 +7,19 @@ use crate::state::BrowserState;
 
 /// Apply Firefox policies (extensions and privacy controls)
 pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<BrowserState> {
+    #[cfg(not(target_os = "macos"))]
     let policy_path = get_firefox_policy_path()?;
 
+    #[cfg(target_os = "macos")]
+    let policy_target = "macOS managed preferences configuration profile".to_string();
+    #[cfg(not(target_os = "macos"))]
+    let policy_target = policy_path.display().to_string();
+
     tracing::debug!(
-        "Preparing Firefox policy application: platform={}, dry_run={}, policy_file={}, extensions={}, disable_private_browsing={:?}",
+        "Preparing Firefox policy application: platform={}, dry_run={}, policy_target={}, extensions={}, disable_private_browsing={:?}",
         crate::browser::current_platform().name(),
         dry_run,
-        policy_path.display(),
+        policy_target,
         config.extensions.len(),
         config.disable_private_browsing
     );
@@ -39,25 +45,30 @@ pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<B
     // Create policies.json content
     let policies_json = create_firefox_policies_json(config)?;
     tracing::debug!(
-        "Final Firefox policies.json for {}: {}",
-        policy_path.display(),
+        "Final Firefox policies for {}: {}",
+        policy_target,
         serde_json::to_string_pretty(&policies_json).unwrap_or_else(|_| policies_json.to_string())
     );
 
-    // Use common JSON file helper
-    crate::platform::common::apply_json_file_with_preview(
-        &policy_path,
-        policies_json.clone(),
-        dry_run,
-    )
-    .with_context(|| {
-        format!(
-            "Failed to apply Firefox policies: {}",
-            policy_path.display()
-        )
-    })?;
+    #[cfg(target_os = "macos")]
+    {
+        tracing::debug!(
+            "Skipping Firefox distribution policies.json on macOS; applying policies via managed preferences profile instead"
+        );
+        apply_firefox_macos_policy_profile(&policies_json, dry_run)?;
+    }
 
-    apply_firefox_macos_policy_profile(&policies_json, dry_run)?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        // Use common JSON file helper
+        crate::platform::common::apply_json_file_with_preview(&policy_path, policies_json, dry_run)
+            .with_context(|| {
+                format!(
+                    "Failed to apply Firefox policies: {}",
+                    policy_path.display()
+                )
+            })?;
+    }
 
     tracing::debug!("Finished writing Firefox policies; building applied state");
 
@@ -76,7 +87,6 @@ fn apply_firefox_macos_policy_profile(
 ) -> Result<()> {
     use crate::platform::macos::{
         bool_to_plist, install_managed_preferences_profile, json_to_plist,
-        write_library_preferences_plist,
     };
     use std::collections::HashMap;
 
@@ -104,29 +114,9 @@ fn apply_firefox_macos_policy_profile(
         updates.keys().collect::<Vec<_>>()
     );
 
-    if dry_run {
-        println!("Plist File: /Library/Preferences/org.mozilla.firefox.plist");
-        println!("  Action: CREATE_OR_UPDATE Firefox macOS policy defaults");
-        for key in updates.keys() {
-            println!("  + Key: {}", key);
-        }
-        println!();
-    } else {
-        write_library_preferences_plist("org.mozilla.firefox", updates.clone())
-            .context("Failed to write Firefox macOS policy defaults plist")?;
-    }
-
     install_managed_preferences_profile("org.mozilla.firefox", "Firefox", updates, dry_run)
         .context("Failed to install Firefox macOS configuration profile")?;
 
-    Ok(())
-}
-
-#[cfg(not(target_os = "macos"))]
-fn apply_firefox_macos_policy_profile(
-    _policies_json: &serde_json::Value,
-    _dry_run: bool,
-) -> Result<()> {
     Ok(())
 }
 
