@@ -29,6 +29,10 @@ pub struct Args {
     /// Enable verbose logging
     #[arg(short, long, global = true)]
     pub verbose: bool,
+
+    /// Reapply policies even when the saved state hash matches the config
+    #[arg(long, global = true)]
+    pub force_apply: bool,
 }
 
 #[derive(Subcommand, Debug)]

@@ -2,7 +2,6 @@
 ///
 /// This module extracts shared policy application logic to reduce code duplication
 /// between Chrome and Edge, which both use the same underlying policy mechanisms.
-
 use anyhow::{Context, Result};
 use serde_json::json;
 use std::path::Path;
@@ -27,7 +26,7 @@ pub struct ChromiumBrowserConfig {
 #[derive(Debug, Clone)]
 pub struct ChromiumConfig {
     pub extensions: Vec<Extension>,
-    pub disable_private_mode: Option<bool>,  // Incognito/InPrivate
+    pub disable_private_mode: Option<bool>, // Incognito/InPrivate
     pub disable_guest_mode: Option<bool>,
     pub allow_deleting_browser_history: Option<bool>,
 }
@@ -62,18 +61,42 @@ pub fn apply_chromium_policies(
 ) -> Result<BrowserState> {
     let platform = crate::browser::current_platform();
 
+    tracing::debug!(
+        "Preparing {} policy application: platform={}, dry_run={}, extensions={}, disable_private_mode={:?}, disable_guest_mode={:?}, allow_deleting_browser_history={:?}",
+        browser_config.browser_name,
+        platform.name(),
+        dry_run,
+        config.extensions.len(),
+        config.disable_private_mode,
+        config.disable_guest_mode,
+        config.allow_deleting_browser_history
+    );
+    for ext in &config.extensions {
+        tracing::debug!(
+            "{} extension policy entry: name={:?}, id={}, update_url={}, settings_keys={:?}",
+            browser_config.browser_name,
+            ext.name,
+            ext.id,
+            ext.update_url
+                .as_deref()
+                .unwrap_or(crate::config::DEFAULT_CHROME_UPDATE_URL),
+            ext.settings.keys().collect::<Vec<_>>()
+        );
+    }
+
     // Apply platform-specific policies
     match platform {
         crate::browser::Platform::Windows => {
             apply_chromium_windows(config, browser_config, dry_run)?
         }
-        crate::browser::Platform::MacOS => {
-            apply_chromium_macos(config, browser_config, dry_run)?
-        }
-        crate::browser::Platform::Linux => {
-            apply_chromium_linux(config, browser_config, dry_run)?
-        }
+        crate::browser::Platform::MacOS => apply_chromium_macos(config, browser_config, dry_run)?,
+        crate::browser::Platform::Linux => apply_chromium_linux(config, browser_config, dry_run)?,
     }
+
+    tracing::debug!(
+        "Finished writing {} platform policies; building applied state",
+        browser_config.browser_name
+    );
 
     // Build and return state (identical for all Chromium browsers)
     let mut state = BrowserState::new();
@@ -90,16 +113,16 @@ pub fn apply_chromium_policies(
 pub fn remove_chromium_policies(browser_config: &ChromiumBrowserConfig) -> Result<()> {
     let platform = crate::browser::current_platform();
 
+    tracing::debug!(
+        "Preparing {} policy removal on platform={}",
+        browser_config.browser_name,
+        platform.name()
+    );
+
     match platform {
-        crate::browser::Platform::Windows => {
-            remove_chromium_windows(browser_config)?
-        }
-        crate::browser::Platform::MacOS => {
-            remove_chromium_macos(browser_config)?
-        }
-        crate::browser::Platform::Linux => {
-            remove_chromium_linux(browser_config)?
-        }
+        crate::browser::Platform::Windows => remove_chromium_windows(browser_config)?,
+        crate::browser::Platform::MacOS => remove_chromium_macos(browser_config)?,
+        crate::browser::Platform::Linux => remove_chromium_linux(browser_config)?,
     }
 
     Ok(())
@@ -127,7 +150,9 @@ fn apply_chromium_windows(
     browser_config: &ChromiumBrowserConfig,
     dry_run: bool,
 ) -> Result<()> {
-    use crate::platform::windows::{apply_registry_policy_with_preview, apply_registry_value_with_preview, RegistryValue};
+    use crate::platform::windows::{
+        RegistryValue, apply_registry_policy_with_preview, apply_registry_value_with_preview,
+    };
 
     tracing::debug!(
         "Applying {} policies on Windows (registry key: {})",
@@ -158,12 +183,8 @@ fn apply_chromium_windows(
                 if !ext.settings.is_empty() {
                     use crate::platform::windows::write_extension_settings;
 
-                    write_extension_settings(
-                        browser_config.registry_key,
-                        &ext.id,
-                        &ext.settings,
-                    )
-                    .with_context(|| {
+                    write_extension_settings(browser_config.registry_key, &ext.id, &ext.settings)
+                        .with_context(|| {
                         format!(
                             "Failed to apply settings for {} extension {}",
                             browser_config.browser_name, ext.name
@@ -210,12 +231,7 @@ fn apply_chromium_windows(
                 RegistryValue::Dword(1), // 1 = Disabled
                 dry_run,
             )
-            .with_context(|| {
-                format!(
-                    "Failed to apply {} to registry",
-                    key_name
-                )
-            })?;
+            .with_context(|| format!("Failed to apply {} to registry", key_name))?;
         }
     }
 
@@ -320,13 +336,14 @@ fn apply_chromium_macos(
         );
     }
 
-    apply_plist_policy_with_preview(browser_config.bundle_id, updates, dry_run)
-        .with_context(|| {
+    apply_plist_policy_with_preview(browser_config.bundle_id, updates, dry_run).with_context(
+        || {
             format!(
                 "Failed to apply {} plist policy",
                 browser_config.browser_name
             )
-        })?;
+        },
+    )?;
 
     // Apply extension settings if configured
     if !dry_run {
@@ -334,17 +351,13 @@ fn apply_chromium_macos(
             if !ext.settings.is_empty() {
                 use crate::platform::macos::write_extension_settings_plist;
 
-                write_extension_settings_plist(
-                    browser_config.bundle_id,
-                    &ext.id,
-                    &ext.settings,
-                )
-                .with_context(|| {
-                    format!(
-                        "Failed to apply settings for {} extension {}",
-                        browser_config.browser_name, ext.name
-                    )
-                })?;
+                write_extension_settings_plist(browser_config.bundle_id, &ext.id, &ext.settings)
+                    .with_context(|| {
+                        format!(
+                            "Failed to apply settings for {} extension {}",
+                            browser_config.browser_name, ext.name
+                        )
+                    })?;
 
                 tracing::debug!(
                     "Applied settings for {} extension: {}",
@@ -386,9 +399,10 @@ fn apply_chromium_linux(
     let policy_file = policy_dir.join("browser-policy.json");
 
     tracing::debug!(
-        "Applying {} policies on Linux (dir: {})",
+        "Applying {} policies on Linux (dir: {}, file: {})",
         browser_config.browser_name,
-        policy_dir.display()
+        policy_dir.display(),
+        policy_file.display()
     );
 
     let mut policy = json!({});
@@ -401,6 +415,11 @@ fn apply_chromium_linux(
             .map(format_chromium_extension_entry)
             .collect();
 
+        tracing::debug!(
+            "{} ExtensionInstallForcelist entries: {:#?}",
+            browser_config.browser_name,
+            extension_strings
+        );
         policy["ExtensionInstallForcelist"] = json!(extension_strings);
     }
 
@@ -413,17 +432,33 @@ fn apply_chromium_linux(
                 "InPrivateModeAvailability"
             };
 
+            tracing::debug!(
+                "{} policy value: {}=1 (private/incognito mode disabled)",
+                browser_config.browser_name,
+                key_name
+            );
             policy[key_name] = json!(1); // 1 = Disabled
         }
     }
 
     // Apply guest mode control
     if let Some(disable_guest_mode) = config.disable_guest_mode {
+        tracing::debug!(
+            "{} policy value: BrowserGuestModeEnabled={} (disable_guest_mode={})",
+            browser_config.browser_name,
+            !disable_guest_mode,
+            disable_guest_mode
+        );
         policy["BrowserGuestModeEnabled"] = json!(!disable_guest_mode);
     }
 
     // Apply AllowDeletingBrowserHistory
     if let Some(allow_deleting_history) = config.allow_deleting_browser_history {
+        tracing::debug!(
+            "{} policy value: AllowDeletingBrowserHistory={}",
+            browser_config.browser_name,
+            allow_deleting_history
+        );
         policy["AllowDeletingBrowserHistory"] = json!(allow_deleting_history);
     }
 
@@ -434,6 +469,13 @@ fn apply_chromium_linux(
     for ext in &config.extensions {
         if !ext.settings.is_empty() {
             has_extension_settings = true;
+            tracing::debug!(
+                "{} extension settings for {} ({}): {:#?}",
+                browser_config.browser_name,
+                ext.name,
+                ext.id,
+                ext.settings
+            );
             extensions_settings.insert(ext.id.clone(), json!(ext.settings));
         }
     }
@@ -447,13 +489,19 @@ fn apply_chromium_linux(
         policy["3rdparty"] = serde_json::Value::Object(thirdparty);
     }
 
-    apply_json_file_with_preview(&policy_file, policy, dry_run)
-        .with_context(|| {
-            format!(
-                "Failed to apply {} JSON policy",
-                browser_config.browser_name
-            )
-        })?;
+    tracing::debug!(
+        "Final {} Linux policy JSON for {}: {}",
+        browser_config.browser_name,
+        policy_file.display(),
+        serde_json::to_string_pretty(&policy).unwrap_or_else(|_| policy.to_string())
+    );
+
+    apply_json_file_with_preview(&policy_file, policy, dry_run).with_context(|| {
+        format!(
+            "Failed to apply {} JSON policy",
+            browser_config.browser_name
+        )
+    })?;
 
     Ok(())
 }
@@ -517,7 +565,9 @@ fn remove_chromium_windows(browser_config: &ChromiumBrowserConfig) -> Result<()>
         );
     }
 
-    if let Err(e) = remove_registry_value(browser_config.registry_key, "AllowDeletingBrowserHistory") {
+    if let Err(e) =
+        remove_registry_value(browser_config.registry_key, "AllowDeletingBrowserHistory")
+    {
         tracing::warn!(
             "Failed to remove {} AllowDeletingBrowserHistory: {}",
             browser_config.browser_name,
@@ -531,12 +581,9 @@ fn remove_chromium_windows(browser_config: &ChromiumBrowserConfig) -> Result<()>
 /// Remove Chromium policies on macOS
 #[cfg(target_os = "macos")]
 fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
-    use crate::platform::macos::{remove_plist_keys, remove_all_extension_settings_plists};
+    use crate::platform::macos::{remove_all_extension_settings_plists, remove_plist_keys};
 
-    tracing::debug!(
-        "Removing {} policies on macOS",
-        browser_config.browser_name
-    );
+    tracing::debug!("Removing {} policies on macOS", browser_config.browser_name);
 
     let privacy_key = if browser_config.browser_name == "Chrome" {
         "IncognitoModeAvailability"
@@ -551,13 +598,12 @@ fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
         "AllowDeletingBrowserHistory".to_string(),
     ];
 
-    remove_plist_keys(browser_config.bundle_id, &keys)
-        .with_context(|| {
-            format!(
-                "Failed to remove {} plist keys",
-                browser_config.browser_name
-            )
-        })?;
+    remove_plist_keys(browser_config.bundle_id, &keys).with_context(|| {
+        format!(
+            "Failed to remove {} plist keys",
+            browser_config.browser_name
+        )
+    })?;
 
     // Remove all extension settings plists
     if let Err(e) = remove_all_extension_settings_plists(browser_config.bundle_id) {
@@ -576,20 +622,16 @@ fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
 fn remove_chromium_linux(browser_config: &ChromiumBrowserConfig) -> Result<()> {
     use crate::platform::linux::remove_json_policy;
 
-    tracing::debug!(
-        "Removing {} policies on Linux",
-        browser_config.browser_name
-    );
+    tracing::debug!("Removing {} policies on Linux", browser_config.browser_name);
 
     let policy_dir = (browser_config.policy_dir_fn)();
 
-    remove_json_policy(policy_dir, "browser-policy")
-        .with_context(|| {
-            format!(
-                "Failed to remove {} JSON policy",
-                browser_config.browser_name
-            )
-        })?;
+    remove_json_policy(policy_dir, "browser-policy").with_context(|| {
+        format!(
+            "Failed to remove {} JSON policy",
+            browser_config.browser_name
+        )
+    })?;
 
     Ok(())
 }

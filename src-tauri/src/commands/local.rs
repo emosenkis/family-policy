@@ -7,12 +7,15 @@ use crate::config;
 use crate::core;
 use crate::state;
 
+use super::utils::init_logging;
+
 /// Local mode arguments
 pub struct LocalArgs {
     pub config: PathBuf,
     pub uninstall: bool,
     pub dry_run: bool,
     pub verbose: bool,
+    pub force_apply: bool,
 }
 
 impl From<Args> for LocalArgs {
@@ -22,6 +25,7 @@ impl From<Args> for LocalArgs {
             uninstall: args.uninstall,
             dry_run: args.dry_run,
             verbose: args.verbose,
+            force_apply: args.force_apply,
         }
     }
 }
@@ -33,8 +37,13 @@ pub fn run_local_mode(args: Args) -> Result<()> {
 }
 
 fn run_local(args: LocalArgs) -> Result<()> {
+    init_logging(args.verbose);
+
     // Print header
-    println!("Browser Extension Policy Manager v{}", env!("CARGO_PKG_VERSION"));
+    println!(
+        "Browser Extension Policy Manager v{}",
+        env!("CARGO_PKG_VERSION")
+    );
     println!("Platform: {}", browser::current_platform().name());
     println!();
 
@@ -55,14 +64,21 @@ fn install_policies(args: &LocalArgs) -> Result<()> {
     // Load configuration
     println!("Loading configuration from: {}", args.config.display());
 
-    let config = config::load_config(&args.config)
-        .context("Failed to load configuration file")?;
+    let config = config::load_config(&args.config).context("Failed to load configuration file")?;
 
     if args.verbose {
         println!("Configuration loaded successfully");
         println!("  - {} policies configured", config.policies.len());
         for policy in &config.policies {
             println!("    - {}: {} browsers", policy.name, policy.browsers.len());
+        }
+        println!(
+            "Verbose logging enabled - policy write paths, generated values, and verification reads will be logged."
+        );
+        if args.force_apply {
+            println!(
+                "Force apply enabled - policies will be rewritten even if the saved state hash matches."
+            );
         }
     }
 
@@ -86,13 +102,20 @@ fn install_policies(args: &LocalArgs) -> Result<()> {
     println!("Applying browser policies...");
     println!();
 
-    let result = core::apply::apply_policies_from_config(&config, args.dry_run)
-        .context("Failed to apply policies")?;
+    let result = core::apply::apply_policies_from_config_with_options(
+        &config,
+        core::apply::ApplyOptions {
+            dry_run: args.dry_run,
+            force: args.force_apply,
+        },
+    )
+    .context("Failed to apply policies")?;
 
     // Display results
     if !result.changed {
         println!("✓ No changes detected - configuration matches current state");
         println!("  All policies are already applied as configured.");
+        println!("  Use --force-apply to rewrite policy files/registry values anyway.");
     } else {
         println!();
         println!("✓ All policies applied successfully");
@@ -100,15 +123,18 @@ fn install_policies(args: &LocalArgs) -> Result<()> {
 
         println!();
         println!("Summary:");
-        println!("  Chrome: {} extensions, {} privacy settings",
-            result.extensions_applied.chrome,
-            result.privacy_settings_applied.chrome);
-        println!("  Firefox: {} extensions, {} privacy settings",
-            result.extensions_applied.firefox,
-            result.privacy_settings_applied.firefox);
-        println!("  Edge: {} extensions, {} privacy settings",
-            result.extensions_applied.edge,
-            result.privacy_settings_applied.edge);
+        println!(
+            "  Chrome: {} extensions, {} privacy settings",
+            result.extensions_applied.chrome, result.privacy_settings_applied.chrome
+        );
+        println!(
+            "  Firefox: {} extensions, {} privacy settings",
+            result.extensions_applied.firefox, result.privacy_settings_applied.firefox
+        );
+        println!(
+            "  Edge: {} extensions, {} privacy settings",
+            result.extensions_applied.edge, result.privacy_settings_applied.edge
+        );
     }
 
     if !result.errors.is_empty() {
@@ -135,36 +161,41 @@ fn uninstall_policies(dry_run: bool) -> Result<()> {
     println!();
 
     // Use core module for removal
-    let result = core::apply::remove_all_policies(dry_run)
-        .context("Failed to remove policies")?;
+    let result = core::apply::remove_all_policies(dry_run).context("Failed to remove policies")?;
 
     if dry_run {
         println!("DRY RUN MODE - No changes will be made");
         println!();
         println!("Would remove:");
-        println!("  Chrome: {} extensions, {} privacy settings",
-            result.extensions_removed.chrome,
-            result.privacy_settings_removed.chrome);
-        println!("  Firefox: {} extensions, {} privacy settings",
-            result.extensions_removed.firefox,
-            result.privacy_settings_removed.firefox);
-        println!("  Edge: {} extensions, {} privacy settings",
-            result.extensions_removed.edge,
-            result.privacy_settings_removed.edge);
+        println!(
+            "  Chrome: {} extensions, {} privacy settings",
+            result.extensions_removed.chrome, result.privacy_settings_removed.chrome
+        );
+        println!(
+            "  Firefox: {} extensions, {} privacy settings",
+            result.extensions_removed.firefox, result.privacy_settings_removed.firefox
+        );
+        println!(
+            "  Edge: {} extensions, {} privacy settings",
+            result.extensions_removed.edge, result.privacy_settings_removed.edge
+        );
     } else {
         println!();
         println!("✓ All policies removed successfully");
         println!();
         println!("Removed:");
-        println!("  Chrome: {} extensions, {} privacy settings",
-            result.extensions_removed.chrome,
-            result.privacy_settings_removed.chrome);
-        println!("  Firefox: {} extensions, {} privacy settings",
-            result.extensions_removed.firefox,
-            result.privacy_settings_removed.firefox);
-        println!("  Edge: {} extensions, {} privacy settings",
-            result.extensions_removed.edge,
-            result.privacy_settings_removed.edge);
+        println!(
+            "  Chrome: {} extensions, {} privacy settings",
+            result.extensions_removed.chrome, result.privacy_settings_removed.chrome
+        );
+        println!(
+            "  Firefox: {} extensions, {} privacy settings",
+            result.extensions_removed.firefox, result.privacy_settings_removed.firefox
+        );
+        println!(
+            "  Edge: {} extensions, {} privacy settings",
+            result.extensions_removed.edge, result.privacy_settings_removed.edge
+        );
     }
 
     if !result.errors.is_empty() {
