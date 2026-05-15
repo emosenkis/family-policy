@@ -8,6 +8,60 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "macos")]
 use plist::Value;
 
+#[cfg(target_os = "macos")]
+const PROFILE_OUTPUT_DIR: &str = "/Library/Application Support/browser-extension-policy/profiles";
+
+#[cfg(target_os = "macos")]
+fn read_plist_dictionary(plist_path: &Path) -> Result<plist::Dictionary> {
+    if !plist_path.exists() {
+        return Ok(plist::Dictionary::new());
+    }
+
+    let file = std::fs::File::open(plist_path)
+        .with_context(|| format!("Failed to open plist file: {}", plist_path.display()))?;
+
+    match plist::from_reader(file) {
+        Ok(Value::Dictionary(dict)) => Ok(dict),
+        Ok(_) => Ok(plist::Dictionary::new()),
+        Err(e) => {
+            eprintln!(
+                "Warning: Failed to parse existing plist at {}: {}. Creating new plist.",
+                plist_path.display(),
+                e
+            );
+            Ok(plist::Dictionary::new())
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn write_plist_dictionary(plist_path: &Path, dict: plist::Dictionary) -> Result<()> {
+    if let Some(parent) = plist_path.parent() {
+        crate::platform::common::ensure_directory_exists(parent)?;
+    }
+
+    let value = Value::Dictionary(dict);
+    let file = std::fs::File::create(plist_path)
+        .with_context(|| format!("Failed to create plist file: {}", plist_path.display()))?;
+
+    plist::to_writer_xml(file, &value)
+        .with_context(|| format!("Failed to write plist file: {}", plist_path.display()))?;
+
+    crate::platform::common::set_permissions_readable_all(plist_path)?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn write_plist_updates(plist_path: &Path, updates: HashMap<String, Value>) -> Result<()> {
+    let mut existing_dict = read_plist_dictionary(plist_path)?;
+
+    for (key, value) in updates {
+        existing_dict.insert(key, value);
+    }
+
+    write_plist_dictionary(plist_path, existing_dict)
+}
+
 /// Write or update a plist file with multiple key-value pairs
 ///
 /// Creates or updates a plist at /Library/Managed Preferences/{bundle_id}.plist
@@ -15,53 +69,283 @@ use plist::Value;
 #[cfg(target_os = "macos")]
 pub fn write_plist_policy(bundle_id: &str, updates: HashMap<String, Value>) -> Result<()> {
     let plist_path = get_plist_path(bundle_id)?;
+    write_plist_updates(&plist_path, updates)
+}
 
-    // Read existing plist if it exists
-    let mut existing_dict = if plist_path.exists() {
-        let file = std::fs::File::open(&plist_path)
-            .with_context(|| format!("Failed to open plist file: {}", plist_path.display()))?;
+/// Write or update a plist in /Library/Preferences.
+///
+/// Some browsers (notably Firefox on macOS) read command-line/defaults managed
+/// policy values from this preferences domain instead of the Managed Preferences
+/// file path used by Chrome-family browsers.
+#[cfg(target_os = "macos")]
+pub fn write_library_preferences_plist(
+    bundle_id: &str,
+    updates: HashMap<String, Value>,
+) -> Result<()> {
+    let plist_path = get_library_preferences_plist_path(bundle_id);
+    write_plist_updates(&plist_path, updates)
+}
 
-        match plist::from_reader(file) {
-            Ok(Value::Dictionary(dict)) => dict,
-            Ok(_) => {
-                // Not a dictionary, start fresh
-                plist::Dictionary::new()
-            }
-            Err(e) => {
-                eprintln!(
-                    "Warning: Failed to parse existing plist at {}: {}. Creating new plist.",
-                    plist_path.display(),
-                    e
-                );
-                plist::Dictionary::new()
-            }
+/// Install a managed preferences configuration profile for browsers that rely on
+/// macOS profiles to surface mandatory policies in their about:policies pages.
+#[cfg(target_os = "macos")]
+pub fn install_managed_preferences_profile(
+    bundle_id: &str,
+    display_name: &str,
+    policy_settings: HashMap<String, Value>,
+    dry_run: bool,
+) -> Result<()> {
+    let profile_path = get_profile_path(bundle_id);
+
+    if dry_run {
+        println!("Configuration Profile: {}", profile_path.display());
+        println!("  Payload domain: {}", bundle_id);
+        println!("  Display name: {}", display_name);
+        println!("  Action: CREATE_OR_REPLACE managed preferences profile");
+        for key in policy_settings.keys() {
+            println!("  + Policy key: {}", key);
         }
-    } else {
-        plist::Dictionary::new()
-    };
-
-    // Merge updates into existing dictionary
-    for (key, value) in updates {
-        existing_dict.insert(key, value);
+        println!();
+        return Ok(());
     }
 
-    // Ensure parent directory exists
-    if let Some(parent) = plist_path.parent() {
+    let profile = create_managed_preferences_profile(bundle_id, display_name, policy_settings);
+    if let Some(parent) = profile_path.parent() {
         crate::platform::common::ensure_directory_exists(parent)?;
     }
 
-    // Write plist
-    let value = Value::Dictionary(existing_dict);
-    let file = std::fs::File::create(&plist_path)
-        .with_context(|| format!("Failed to create plist file: {}", plist_path.display()))?;
+    let file = std::fs::File::create(&profile_path).with_context(|| {
+        format!(
+            "Failed to create configuration profile: {}",
+            profile_path.display()
+        )
+    })?;
+    plist::to_writer_xml(file, &profile).with_context(|| {
+        format!(
+            "Failed to write configuration profile: {}",
+            profile_path.display()
+        )
+    })?;
+    crate::platform::common::set_permissions_readable_all(&profile_path)?;
 
-    plist::to_writer_xml(file, &value)
-        .with_context(|| format!("Failed to write plist file: {}", plist_path.display()))?;
+    tracing::debug!(
+        "Installing macOS managed preferences profile for {} from {}",
+        bundle_id,
+        profile_path.display()
+    );
 
-    // Set permissions
-    crate::platform::common::set_permissions_readable_all(&plist_path)?;
+    // Re-applying a profile with an existing PayloadIdentifier can fail on some
+    // macOS releases, so remove our previous profile first. Ignore failures: the
+    // profile may not exist yet, and the install below will report real errors.
+    let _ = remove_managed_preferences_profile(bundle_id);
+
+    match std::process::Command::new("/usr/bin/profiles")
+        .args([
+            "install",
+            "-type",
+            "configuration",
+            "-path",
+            profile_path.to_string_lossy().as_ref(),
+        ])
+        .output()
+    {
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(output) => {
+            tracing::warn!(
+                "profiles install failed for {} (status: {}). stderr: {}. Retrying with legacy -I -F syntax.",
+                bundle_id,
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let legacy_output = std::process::Command::new("/usr/bin/profiles")
+                .args(["-I", "-F", profile_path.to_string_lossy().as_ref()])
+                .output()
+                .with_context(|| "Failed to run legacy profiles command")?;
+
+            if legacy_output.status.success() {
+                Ok(())
+            } else {
+                anyhow::bail!(
+                    "Failed to install macOS configuration profile for {}. profiles stderr: {}; legacy stderr: {}",
+                    bundle_id,
+                    String::from_utf8_lossy(&output.stderr),
+                    String::from_utf8_lossy(&legacy_output.stderr)
+                );
+            }
+        }
+        Err(e) => Err(e).with_context(|| "Failed to run profiles command"),
+    }
+}
+
+/// Remove the configuration profile installed by install_managed_preferences_profile.
+#[cfg(target_os = "macos")]
+pub fn remove_managed_preferences_profile(bundle_id: &str) -> Result<()> {
+    let profile_identifier = format!("com.family-policy.browser.{}", bundle_id);
+    let output = std::process::Command::new("/usr/bin/profiles")
+        .args(["remove", "-identifier", profile_identifier.as_str()])
+        .output()
+        .with_context(|| "Failed to run profiles remove command")?;
+
+    if output.status.success() {
+        tracing::debug!(
+            "Removed macOS managed preferences profile {}",
+            profile_identifier
+        );
+    } else {
+        tracing::debug!(
+            "macOS managed preferences profile {} was not removed (it may not exist): {}",
+            profile_identifier,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     Ok(())
+}
+
+/// Remove keys from a /Library/Preferences plist.
+#[cfg(target_os = "macos")]
+pub fn remove_library_preferences_plist_keys(bundle_id: &str, keys: &[String]) -> Result<()> {
+    let plist_path = get_library_preferences_plist_path(bundle_id);
+    remove_plist_keys_at_path(&plist_path, keys)
+}
+
+#[cfg(target_os = "macos")]
+fn remove_plist_keys_at_path(plist_path: &Path, keys: &[String]) -> Result<()> {
+    if !plist_path.exists() {
+        return Ok(());
+    }
+
+    let file = std::fs::File::open(plist_path)
+        .with_context(|| format!("Failed to open plist file: {}", plist_path.display()))?;
+
+    let mut dict = match plist::from_reader(file) {
+        Ok(Value::Dictionary(dict)) => dict,
+        Ok(_) => {
+            std::fs::remove_file(plist_path)?;
+            return Ok(());
+        }
+        Err(e) => {
+            return Err(e)
+                .with_context(|| format!("Failed to parse plist file: {}", plist_path.display()));
+        }
+    };
+
+    for key in keys {
+        dict.remove(key);
+    }
+
+    if dict.is_empty() {
+        std::fs::remove_file(plist_path)
+            .with_context(|| format!("Failed to delete plist file: {}", plist_path.display()))?;
+    } else {
+        write_plist_dictionary(plist_path, dict)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn create_managed_preferences_profile(
+    bundle_id: &str,
+    display_name: &str,
+    policy_settings: HashMap<String, Value>,
+) -> Value {
+    let profile_identifier = format!("com.family-policy.browser.{}", bundle_id);
+    let payload_identifier = format!("{}.managed-preferences", profile_identifier);
+
+    let mut mcx_settings = plist::Dictionary::new();
+    for (key, value) in policy_settings {
+        mcx_settings.insert(key, value);
+    }
+
+    let mut forced_entry = plist::Dictionary::new();
+    forced_entry.insert(
+        "mcx_preference_settings".to_string(),
+        Value::Dictionary(mcx_settings),
+    );
+
+    let mut domain_payload = plist::Dictionary::new();
+    domain_payload.insert(
+        "Forced".to_string(),
+        Value::Array(vec![Value::Dictionary(forced_entry)]),
+    );
+
+    let mut managed_content = plist::Dictionary::new();
+    managed_content.insert(bundle_id.to_string(), Value::Dictionary(domain_payload));
+
+    let mut managed_payload = plist::Dictionary::new();
+    managed_payload.insert(
+        "PayloadType".to_string(),
+        Value::String("com.apple.ManagedClient.preferences".to_string()),
+    );
+    managed_payload.insert("PayloadVersion".to_string(), Value::Integer(1.into()));
+    managed_payload.insert(
+        "PayloadIdentifier".to_string(),
+        Value::String(payload_identifier),
+    );
+    managed_payload.insert(
+        "PayloadUUID".to_string(),
+        Value::String(uuid::Uuid::new_v4().to_string()),
+    );
+    managed_payload.insert("PayloadEnabled".to_string(), Value::Boolean(true));
+    managed_payload.insert(
+        "PayloadDisplayName".to_string(),
+        Value::String(format!("{} Managed Preferences", display_name)),
+    );
+    managed_payload.insert(
+        "PayloadContent".to_string(),
+        Value::Dictionary(managed_content),
+    );
+
+    let mut profile = plist::Dictionary::new();
+    profile.insert(
+        "PayloadType".to_string(),
+        Value::String("Configuration".to_string()),
+    );
+    profile.insert("PayloadVersion".to_string(), Value::Integer(1.into()));
+    profile.insert(
+        "PayloadIdentifier".to_string(),
+        Value::String(profile_identifier),
+    );
+    profile.insert(
+        "PayloadUUID".to_string(),
+        Value::String(uuid::Uuid::new_v4().to_string()),
+    );
+    profile.insert(
+        "PayloadDisplayName".to_string(),
+        Value::String(format!("Family Policy - {}", display_name)),
+    );
+    profile.insert(
+        "PayloadDescription".to_string(),
+        Value::String(format!(
+            "Family Policy managed browser policies for {}",
+            display_name
+        )),
+    );
+    profile.insert(
+        "PayloadOrganization".to_string(),
+        Value::String("Family Policy".to_string()),
+    );
+    profile.insert(
+        "PayloadContent".to_string(),
+        Value::Array(vec![Value::Dictionary(managed_payload)]),
+    );
+
+    Value::Dictionary(profile)
+}
+
+#[cfg(target_os = "macos")]
+fn get_library_preferences_plist_path(bundle_id: &str) -> PathBuf {
+    let mut path = PathBuf::from("/Library/Preferences");
+    path.push(format!("{}.plist", bundle_id));
+    path
+}
+
+#[cfg(target_os = "macos")]
+fn get_profile_path(bundle_id: &str) -> PathBuf {
+    let mut path = PathBuf::from(PROFILE_OUTPUT_DIR);
+    path.push(format!("{}.mobileconfig", bundle_id));
+    path
 }
 
 /// Remove specific keys from a plist
@@ -70,50 +354,7 @@ pub fn write_plist_policy(bundle_id: &str, updates: HashMap<String, Value>) -> R
 #[cfg(target_os = "macos")]
 pub fn remove_plist_keys(bundle_id: &str, keys: &[String]) -> Result<()> {
     let plist_path = get_plist_path(bundle_id)?;
-
-    if !plist_path.exists() {
-        // Nothing to do (idempotent)
-        return Ok(());
-    }
-
-    // Read existing plist
-    let file = std::fs::File::open(&plist_path)
-        .with_context(|| format!("Failed to open plist file: {}", plist_path.display()))?;
-
-    let mut dict = match plist::from_reader(file) {
-        Ok(Value::Dictionary(dict)) => dict,
-        Ok(_) => {
-            // Not a dictionary, just delete the file
-            std::fs::remove_file(&plist_path)?;
-            return Ok(());
-        }
-        Err(e) => {
-            return Err(e).with_context(|| {
-                format!("Failed to parse plist file: {}", plist_path.display())
-            });
-        }
-    };
-
-    // Remove specified keys
-    for key in keys {
-        dict.remove(key);
-    }
-
-    // If dictionary is now empty, delete the file
-    if dict.is_empty() {
-        std::fs::remove_file(&plist_path)
-            .with_context(|| format!("Failed to delete plist file: {}", plist_path.display()))?;
-    } else {
-        // Write updated plist
-        let value = Value::Dictionary(dict);
-        let file = std::fs::File::create(&plist_path)
-            .with_context(|| format!("Failed to create plist file: {}", plist_path.display()))?;
-
-        plist::to_writer_xml(file, &value)
-            .with_context(|| format!("Failed to write plist file: {}", plist_path.display()))?;
-    }
-
-    Ok(())
+    remove_plist_keys_at_path(&plist_path, keys)
 }
 
 /// Delete an entire plist file
@@ -140,12 +381,7 @@ fn get_plist_path(bundle_id: &str) -> Result<PathBuf> {
 /// Helper to create a plist array from a vector of strings
 #[cfg(target_os = "macos")]
 pub fn string_vec_to_plist_array(strings: Vec<String>) -> Value {
-    Value::Array(
-        strings
-            .into_iter()
-            .map(Value::String)
-            .collect()
-    )
+    Value::Array(strings.into_iter().map(Value::String).collect())
 }
 
 /// Helper to create a plist integer
@@ -176,10 +412,7 @@ pub fn json_to_plist(value: &serde_json::Value) -> Option<Value> {
         }
         serde_json::Value::String(s) => Some(Value::String(s.clone())),
         serde_json::Value::Array(arr) => {
-            let plist_arr: Vec<Value> = arr
-                .iter()
-                .filter_map(json_to_plist)
-                .collect();
+            let plist_arr: Vec<Value> = arr.iter().filter_map(json_to_plist).collect();
             Some(Value::Array(plist_arr))
         }
         serde_json::Value::Object(obj) => {
@@ -285,7 +518,13 @@ pub fn apply_plist_policy_with_preview(
             std::fs::File::open(&plist_path)
                 .ok()
                 .and_then(|f| plist::from_reader::<_, plist::Value>(f).ok())
-                .and_then(|v| if let plist::Value::Dictionary(d) = v { Some(d) } else { None })
+                .and_then(|v| {
+                    if let plist::Value::Dictionary(d) = v {
+                        Some(d)
+                    } else {
+                        None
+                    }
+                })
         } else {
             None
         };

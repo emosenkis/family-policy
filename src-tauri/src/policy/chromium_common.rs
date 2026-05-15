@@ -336,14 +336,31 @@ fn apply_chromium_macos(
         );
     }
 
-    apply_plist_policy_with_preview(browser_config.bundle_id, updates, dry_run).with_context(
-        || {
+    apply_plist_policy_with_preview(browser_config.bundle_id, updates.clone(), dry_run)
+        .with_context(|| {
             format!(
                 "Failed to apply {} plist policy",
                 browser_config.browser_name
             )
-        },
-    )?;
+        })?;
+
+    // A raw file in /Library/Managed Preferences is useful for inspection and
+    // older local workflows, but current macOS releases and browser builds are
+    // most reliable when the same managed preferences are installed as a
+    // configuration profile. Without this, chrome://policy and edge://policy can
+    // show no active policies even though the plist file exists on disk.
+    crate::platform::macos::install_managed_preferences_profile(
+        browser_config.bundle_id,
+        browser_config.browser_name,
+        updates,
+        dry_run,
+    )
+    .with_context(|| {
+        format!(
+            "Failed to install {} macOS configuration profile",
+            browser_config.browser_name
+        )
+    })?;
 
     // Apply extension settings if configured
     if !dry_run {
@@ -581,7 +598,9 @@ fn remove_chromium_windows(browser_config: &ChromiumBrowserConfig) -> Result<()>
 /// Remove Chromium policies on macOS
 #[cfg(target_os = "macos")]
 fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
-    use crate::platform::macos::{remove_all_extension_settings_plists, remove_plist_keys};
+    use crate::platform::macos::{
+        remove_all_extension_settings_plists, remove_managed_preferences_profile, remove_plist_keys,
+    };
 
     tracing::debug!("Removing {} policies on macOS", browser_config.browser_name);
 
@@ -604,6 +623,14 @@ fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
             browser_config.browser_name
         )
     })?;
+
+    if let Err(e) = remove_managed_preferences_profile(browser_config.bundle_id) {
+        tracing::warn!(
+            "Failed to remove {} macOS configuration profile: {}",
+            browser_config.browser_name,
+            e
+        );
+    }
 
     // Remove all extension settings plists
     if let Err(e) = remove_all_extension_settings_plists(browser_config.bundle_id) {
