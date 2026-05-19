@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use plist::Value;
 
 #[cfg(target_os = "macos")]
+const MANAGED_PREFERENCES_DIR: &str = "/Library/Managed Preferences";
+#[cfg(target_os = "macos")]
 const PROFILE_OUTPUT_DIR: &str = "/Library/Application Support/browser-extension-policy/profiles";
 
 #[cfg(target_os = "macos")]
@@ -41,11 +43,10 @@ fn write_plist_dictionary(plist_path: &Path, dict: plist::Dictionary) -> Result<
     }
 
     let value = Value::Dictionary(dict);
-    let file = std::fs::File::create(plist_path)
-        .with_context(|| format!("Failed to create plist file: {}", plist_path.display()))?;
-
-    plist::to_writer_xml(file, &value)
+    let mut content = Vec::new();
+    plist::to_writer_xml(&mut content, &value)
         .with_context(|| format!("Failed to write plist file: {}", plist_path.display()))?;
+    crate::platform::common::atomic_write(plist_path, &content)?;
 
     crate::platform::common::set_permissions_readable_all(plist_path)?;
     Ok(())
@@ -62,10 +63,12 @@ fn write_plist_updates(plist_path: &Path, updates: HashMap<String, Value>) -> Re
     write_plist_dictionary(plist_path, existing_dict)
 }
 
-/// Write or update a plist file with multiple key-value pairs
+/// Write or update a mandatory Managed Preferences plist with multiple key-value pairs.
 ///
-/// Creates or updates a plist at /Library/Managed Preferences/{bundle_id}.plist
-/// Preserves existing keys that are not in the updates map
+/// Chrome and other Chromium-based browsers read mandatory macOS policies from
+/// `/Library/Managed Preferences/{bundle_id}.plist`. This is the local-file
+/// equivalent of deploying the same plist through a configuration profile.
+/// Existing keys that are not in the updates map are preserved.
 #[cfg(target_os = "macos")]
 pub fn write_plist_policy(bundle_id: &str, updates: HashMap<String, Value>) -> Result<()> {
     let plist_path = get_plist_path(bundle_id)?;
@@ -382,7 +385,7 @@ pub fn remove_plist(bundle_id: &str) -> Result<()> {
 /// Get the path to a managed preferences plist
 #[cfg(target_os = "macos")]
 fn get_plist_path(bundle_id: &str) -> Result<PathBuf> {
-    let mut path = PathBuf::from("/Library/Managed Preferences");
+    let mut path = PathBuf::from(MANAGED_PREFERENCES_DIR);
     path.push(format!("{}.plist", bundle_id));
     Ok(path)
 }
@@ -437,11 +440,13 @@ pub fn json_to_plist(value: &serde_json::Value) -> Option<Value> {
     }
 }
 
-/// Remove all extension settings plists for a browser
-/// Removes all plists matching: /Library/Managed Preferences/{browser_bundle_prefix}.extensions.*.plist
+/// Remove all extension settings plists for a browser.
+///
+/// Removes all plists matching:
+/// `/Library/Managed Preferences/{browser_bundle_prefix}.extensions.*.plist`.
 #[cfg(target_os = "macos")]
 pub fn remove_all_extension_settings_plists(browser_bundle_prefix: &str) -> Result<()> {
-    let managed_prefs_dir = Path::new("/Library/Managed Preferences");
+    let managed_prefs_dir = Path::new(MANAGED_PREFERENCES_DIR);
 
     if !managed_prefs_dir.exists() {
         return Ok(());
