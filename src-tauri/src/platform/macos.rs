@@ -8,10 +8,15 @@ use std::path::{Path, PathBuf};
 #[cfg(target_os = "macos")]
 use plist::Value;
 
-/// Write or update a plist file with multiple key-value pairs
+#[cfg(target_os = "macos")]
+const MANAGED_PREFERENCES_DIR: &str = "/Library/Managed Preferences";
+
+/// Write or update a mandatory Managed Preferences plist with multiple key-value pairs.
 ///
-/// Creates or updates a plist at /Library/Managed Preferences/{bundle_id}.plist
-/// Preserves existing keys that are not in the updates map
+/// Chrome and other Chromium-based browsers read mandatory macOS policies from
+/// `/Library/Managed Preferences/{bundle_id}.plist`. This is the local-file
+/// equivalent of deploying the same plist through a configuration profile.
+/// Existing keys that are not in the updates map are preserved.
 #[cfg(target_os = "macos")]
 pub fn write_plist_policy(bundle_id: &str, updates: HashMap<String, Value>) -> Result<()> {
     let plist_path = get_plist_path(bundle_id)?;
@@ -50,13 +55,12 @@ pub fn write_plist_policy(bundle_id: &str, updates: HashMap<String, Value>) -> R
         crate::platform::common::ensure_directory_exists(parent)?;
     }
 
-    // Write plist
+    // Write plist atomically so browsers never observe a truncated policy file.
     let value = Value::Dictionary(existing_dict);
-    let file = std::fs::File::create(&plist_path)
-        .with_context(|| format!("Failed to create plist file: {}", plist_path.display()))?;
-
-    plist::to_writer_xml(file, &value)
+    let mut content = Vec::new();
+    plist::to_writer_xml(&mut content, &value)
         .with_context(|| format!("Failed to write plist file: {}", plist_path.display()))?;
+    crate::platform::common::atomic_write(&plist_path, &content)?;
 
     // Set permissions
     crate::platform::common::set_permissions_readable_all(&plist_path)?;
@@ -88,9 +92,8 @@ pub fn remove_plist_keys(bundle_id: &str, keys: &[String]) -> Result<()> {
             return Ok(());
         }
         Err(e) => {
-            return Err(e).with_context(|| {
-                format!("Failed to parse plist file: {}", plist_path.display())
-            });
+            return Err(e)
+                .with_context(|| format!("Failed to parse plist file: {}", plist_path.display()));
         }
     };
 
@@ -104,13 +107,13 @@ pub fn remove_plist_keys(bundle_id: &str, keys: &[String]) -> Result<()> {
         std::fs::remove_file(&plist_path)
             .with_context(|| format!("Failed to delete plist file: {}", plist_path.display()))?;
     } else {
-        // Write updated plist
+        // Write updated plist atomically.
         let value = Value::Dictionary(dict);
-        let file = std::fs::File::create(&plist_path)
-            .with_context(|| format!("Failed to create plist file: {}", plist_path.display()))?;
-
-        plist::to_writer_xml(file, &value)
+        let mut content = Vec::new();
+        plist::to_writer_xml(&mut content, &value)
             .with_context(|| format!("Failed to write plist file: {}", plist_path.display()))?;
+        crate::platform::common::atomic_write(&plist_path, &content)?;
+        crate::platform::common::set_permissions_readable_all(&plist_path)?;
     }
 
     Ok(())
@@ -132,7 +135,7 @@ pub fn remove_plist(bundle_id: &str) -> Result<()> {
 /// Get the path to a managed preferences plist
 #[cfg(target_os = "macos")]
 fn get_plist_path(bundle_id: &str) -> Result<PathBuf> {
-    let mut path = PathBuf::from("/Library/Managed Preferences");
+    let mut path = PathBuf::from(MANAGED_PREFERENCES_DIR);
     path.push(format!("{}.plist", bundle_id));
     Ok(path)
 }
@@ -140,12 +143,7 @@ fn get_plist_path(bundle_id: &str) -> Result<PathBuf> {
 /// Helper to create a plist array from a vector of strings
 #[cfg(target_os = "macos")]
 pub fn string_vec_to_plist_array(strings: Vec<String>) -> Value {
-    Value::Array(
-        strings
-            .into_iter()
-            .map(Value::String)
-            .collect()
-    )
+    Value::Array(strings.into_iter().map(Value::String).collect())
 }
 
 /// Helper to create a plist integer
@@ -176,10 +174,7 @@ pub fn json_to_plist(value: &serde_json::Value) -> Option<Value> {
         }
         serde_json::Value::String(s) => Some(Value::String(s.clone())),
         serde_json::Value::Array(arr) => {
-            let plist_arr: Vec<Value> = arr
-                .iter()
-                .filter_map(json_to_plist)
-                .collect();
+            let plist_arr: Vec<Value> = arr.iter().filter_map(json_to_plist).collect();
             Some(Value::Array(plist_arr))
         }
         serde_json::Value::Object(obj) => {
@@ -195,8 +190,10 @@ pub fn json_to_plist(value: &serde_json::Value) -> Option<Value> {
     }
 }
 
-/// Write extension settings to a separate plist file
-/// Extension settings go in: /Library/Managed Preferences/com.{browser}.extensions.{extension_id}.plist
+/// Write Chrome extension managed-storage settings to a separate plist file.
+///
+/// Chromium reads extension policy from the synthetic bundle id
+/// `{browser_bundle_id}.extensions.{extension_id}` on macOS.
 #[cfg(target_os = "macos")]
 pub fn write_extension_settings_plist(
     browser_bundle_prefix: &str,
@@ -227,11 +224,13 @@ pub fn remove_extension_settings_plist(
     remove_plist(&bundle_id)
 }
 
-/// Remove all extension settings plists for a browser
-/// Removes all plists matching: /Library/Managed Preferences/{browser_bundle_prefix}.extensions.*.plist
+/// Remove all extension settings plists for a browser.
+///
+/// Removes all plists matching:
+/// `/Library/Managed Preferences/{browser_bundle_prefix}.extensions.*.plist`.
 #[cfg(target_os = "macos")]
 pub fn remove_all_extension_settings_plists(browser_bundle_prefix: &str) -> Result<()> {
-    let managed_prefs_dir = Path::new("/Library/Managed Preferences");
+    let managed_prefs_dir = Path::new(MANAGED_PREFERENCES_DIR);
 
     if !managed_prefs_dir.exists() {
         return Ok(());
@@ -277,7 +276,7 @@ pub fn apply_plist_policy_with_preview(
     dry_run: bool,
 ) -> Result<()> {
     if dry_run {
-        let plist_path = format!("/Library/Managed Preferences/{}.plist", bundle_id);
+        let plist_path = format!("{}/{}.plist", MANAGED_PREFERENCES_DIR, bundle_id);
         println!("Plist File: {}", plist_path);
 
         // Try to read existing plist
@@ -285,7 +284,13 @@ pub fn apply_plist_policy_with_preview(
             std::fs::File::open(&plist_path)
                 .ok()
                 .and_then(|f| plist::from_reader::<_, plist::Value>(f).ok())
-                .and_then(|v| if let plist::Value::Dictionary(d) = v { Some(d) } else { None })
+                .and_then(|v| {
+                    if let plist::Value::Dictionary(d) = v {
+                        Some(d)
+                    } else {
+                        None
+                    }
+                })
         } else {
             None
         };

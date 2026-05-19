@@ -114,14 +114,13 @@ edge:
 
 **Chrome/Edge (Chromium-based)**:
 - **Windows**: Writes to registry at `HKLM\SOFTWARE\Policies\Google\Chrome` (or Microsoft\Edge)
-- **macOS**: Creates plist at `/Library/Managed Preferences/com.google.Chrome.plist`
+- **macOS**: Creates mandatory Managed Preferences plist files such as `/Library/Managed Preferences/com.google.Chrome.plist`. This matches Chrome's macOS plist/configuration-profile policy model.
 - **Linux**: Creates JSON at `/etc/opt/chrome/policies/managed/browser-policy.json`
 
 **Firefox**:
-- **All Platforms**: Creates `policies.json` file:
-  - Windows: `C:\Program Files\Mozilla Firefox\distribution\policies.json`
-  - macOS: `/Applications/Firefox.app/Contents/Resources/distribution/policies.json`
-  - Linux: `/etc/firefox/policies/policies.json`
+- **Windows**: Creates `C:\Program Files\Mozilla Firefox\distribution\policies.json`
+- **macOS**: Creates the managed preferences plist at `/Library/Managed Preferences/org.mozilla.firefox.plist`
+- **Linux**: Creates `/etc/firefox/policies/policies.json`
 
 ### Privacy Policies
 
