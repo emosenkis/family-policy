@@ -1,9 +1,14 @@
 use anyhow::{Context, Result};
+#[cfg(any(target_os = "macos", test))]
+use plist::Value;
 use serde_json::json;
 use std::path::PathBuf;
 
 use crate::config::FirefoxConfig;
 use crate::state::BrowserState;
+
+#[cfg(target_os = "macos")]
+const FIREFOX_MACOS_BUNDLE_ID: &str = "org.mozilla.firefox";
 
 /// Apply Firefox policies (extensions and privacy controls)
 pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<BrowserState> {
@@ -55,7 +60,14 @@ pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<B
         tracing::debug!(
             "Skipping Firefox distribution policies.json on macOS; applying policies via managed preferences profile instead"
         );
-        apply_firefox_macos_policy_profile(&policies_json, dry_run)?;
+        let policies_plist = create_firefox_policies_plist(config)?;
+        crate::platform::macos::install_managed_preferences_profile(
+            FIREFOX_MACOS_BUNDLE_ID,
+            "Firefox",
+            policies_plist,
+            dry_run,
+        )
+        .context("Failed to install Firefox macOS configuration profile")?;
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -80,48 +92,14 @@ pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<B
     Ok(state)
 }
 
-#[cfg(target_os = "macos")]
-fn apply_firefox_macos_policy_profile(
-    policies_json: &serde_json::Value,
-    dry_run: bool,
-) -> Result<()> {
-    use crate::platform::macos::{
-        bool_to_plist, install_managed_preferences_profile, json_to_plist,
-    };
-    use std::collections::HashMap;
-
-    let mut updates = HashMap::new();
-    updates.insert("EnterprisePoliciesEnabled".to_string(), bool_to_plist(true));
-
-    if let Some(policy_object) = policies_json
-        .get("policies")
-        .and_then(|value| value.as_object())
-    {
-        for (key, value) in policy_object {
-            if let Some(plist_value) = json_to_plist(value) {
-                updates.insert(key.clone(), plist_value);
-            } else {
-                tracing::warn!(
-                    "Could not convert Firefox policy {} to a macOS plist value",
-                    key
-                );
-            }
-        }
-    }
-
-    tracing::debug!(
-        "Applying Firefox macOS policy profile/plist with keys: {:?}",
-        updates.keys().collect::<Vec<_>>()
-    );
-
-    install_managed_preferences_profile("org.mozilla.firefox", "Firefox", updates, dry_run)
-        .context("Failed to install Firefox macOS configuration profile")?;
-
-    Ok(())
-}
-
 /// Remove all Firefox policies
 pub fn remove_firefox_policies() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        return remove_firefox_macos_policy_profile();
+    }
+
+    #[cfg(not(target_os = "macos"))]
     let policy_path = get_firefox_policy_path()?;
 
     tracing::debug!(
@@ -158,8 +136,6 @@ pub fn remove_firefox_policies() -> Result<()> {
         );
     }
 
-    remove_firefox_macos_policy_profile()?;
-
     Ok(())
 }
 
@@ -175,10 +151,10 @@ fn remove_firefox_macos_policy_profile() -> Result<()> {
         "DisablePrivateBrowsing".to_string(),
     ];
 
-    remove_library_preferences_plist_keys("org.mozilla.firefox", &keys)
+    remove_library_preferences_plist_keys(FIREFOX_MACOS_BUNDLE_ID, &keys)
         .context("Failed to remove Firefox macOS policy defaults plist keys")?;
 
-    if let Err(e) = remove_managed_preferences_profile("org.mozilla.firefox") {
+    if let Err(e) = remove_managed_preferences_profile(FIREFOX_MACOS_BUNDLE_ID) {
         tracing::warn!(
             "Failed to remove Firefox macOS configuration profile: {}",
             e
@@ -323,6 +299,54 @@ fn create_firefox_policies_json(config: &FirefoxConfig) -> Result<serde_json::Va
     Ok(wrapped)
 }
 
+/// Create Firefox macOS managed-preferences plist structure.
+///
+/// Firefox's macOS plist is rooted directly at policy keys, unlike policies.json
+/// which wraps them in a top-level `policies` object.
+#[cfg(any(target_os = "macos", test))]
+fn create_firefox_policies_plist(
+    config: &FirefoxConfig,
+) -> Result<std::collections::HashMap<String, Value>> {
+    let mut policies = std::collections::HashMap::new();
+    policies.insert(
+        "EnterprisePoliciesEnabled".to_string(),
+        Value::Boolean(true),
+    );
+
+    if !config.extensions.is_empty() {
+        let mut extension_settings = plist::Dictionary::new();
+
+        for ext in &config.extensions {
+            let install_url = ext.install_url.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("Firefox extension '{}' must have install_url", ext.name)
+            })?;
+
+            let mut extension_policy = plist::Dictionary::new();
+            extension_policy.insert(
+                "installation_mode".to_string(),
+                Value::String("force_installed".to_string()),
+            );
+            extension_policy.insert(
+                "install_url".to_string(),
+                Value::String(install_url.clone()),
+            );
+
+            extension_settings.insert(ext.id.clone(), Value::Dictionary(extension_policy));
+        }
+
+        policies.insert(
+            "ExtensionSettings".to_string(),
+            Value::Dictionary(extension_settings),
+        );
+    }
+
+    if config.disable_private_browsing == Some(true) {
+        policies.insert("DisablePrivateBrowsing".to_string(), Value::Boolean(true));
+    }
+
+    Ok(policies)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,5 +393,51 @@ mod tests {
 
         assert!(policies["policies"]["ExtensionSettings"]["test@example.com"].is_object());
         assert!(policies["policies"]["DisablePrivateBrowsing"].is_null());
+    }
+
+    #[test]
+    fn test_create_firefox_policies_plist_matches_macos_shape() {
+        let config = FirefoxConfig {
+            extensions: vec![Extension {
+                id: "test@example.com".to_string(),
+                name: "Test Extension".to_string(),
+                update_url: None,
+                install_url: Some("https://example.com/extension.xpi".to_string()),
+                settings: HashMap::new(),
+            }],
+            disable_private_browsing: Some(true),
+        };
+
+        let policies = create_firefox_policies_plist(&config).unwrap();
+
+        assert_eq!(
+            policies.get("EnterprisePoliciesEnabled"),
+            Some(&Value::Boolean(true))
+        );
+        assert_eq!(
+            policies.get("DisablePrivateBrowsing"),
+            Some(&Value::Boolean(true))
+        );
+        assert!(!policies.contains_key("policies"));
+
+        let extension_settings = match policies.get("ExtensionSettings") {
+            Some(Value::Dictionary(settings)) => settings,
+            _ => panic!("Expected ExtensionSettings dictionary"),
+        };
+        let extension_policy = match extension_settings.get("test@example.com") {
+            Some(Value::Dictionary(policy)) => policy,
+            _ => panic!("Expected extension policy dictionary"),
+        };
+
+        assert_eq!(
+            extension_policy.get("installation_mode"),
+            Some(&Value::String("force_installed".to_string()))
+        );
+        assert_eq!(
+            extension_policy.get("install_url"),
+            Some(&Value::String(
+                "https://example.com/extension.xpi".to_string()
+            ))
+        );
     }
 }
