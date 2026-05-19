@@ -100,43 +100,45 @@ pub fn remove_firefox_policies() -> Result<()> {
     }
 
     #[cfg(not(target_os = "macos"))]
-    let policy_path = get_firefox_policy_path()?;
+    {
+        let policy_path = get_firefox_policy_path()?;
 
-    tracing::debug!(
-        "Preparing Firefox policy removal: platform={}, policy_file={}",
-        crate::browser::current_platform().name(),
-        policy_path.display()
-    );
-
-    if policy_path.exists() {
-        tracing::debug!("Removing Firefox policy file: {}", policy_path.display());
-        std::fs::remove_file(&policy_path).with_context(|| {
-            format!(
-                "Failed to remove Firefox policies: {}",
-                policy_path.display()
-            )
-        })?;
-
-        // Try to remove the distribution directory if it's empty
-        if let Some(parent) = policy_path.parent() {
-            if let Ok(mut entries) = std::fs::read_dir(parent) {
-                if entries.next().is_none() {
-                    tracing::debug!(
-                        "Removing empty Firefox policy directory: {}",
-                        parent.display()
-                    );
-                    let _ = std::fs::remove_dir(parent);
-                }
-            }
-        }
-    } else {
         tracing::debug!(
-            "Firefox policy file does not exist; nothing to remove: {}",
+            "Preparing Firefox policy removal: platform={}, policy_file={}",
+            crate::browser::current_platform().name(),
             policy_path.display()
         );
-    }
 
-    Ok(())
+        if policy_path.exists() {
+            tracing::debug!("Removing Firefox policy file: {}", policy_path.display());
+            std::fs::remove_file(&policy_path).with_context(|| {
+                format!(
+                    "Failed to remove Firefox policies: {}",
+                    policy_path.display()
+                )
+            })?;
+
+            // Try to remove the distribution directory if it's empty
+            if let Some(parent) = policy_path.parent() {
+                if let Ok(mut entries) = std::fs::read_dir(parent) {
+                    if entries.next().is_none() {
+                        tracing::debug!(
+                            "Removing empty Firefox policy directory: {}",
+                            parent.display()
+                        );
+                        let _ = std::fs::remove_dir(parent);
+                    }
+                }
+            }
+        } else {
+            tracing::debug!(
+                "Firefox policy file does not exist; nothing to remove: {}",
+                policy_path.display()
+            );
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(target_os = "macos")]
