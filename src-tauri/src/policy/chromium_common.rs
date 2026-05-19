@@ -270,7 +270,7 @@ fn apply_chromium_windows(
     Ok(())
 }
 
-/// Apply Chromium policies on macOS (via plist)
+/// Apply Chromium policies on macOS (via configuration profile)
 #[cfg(target_os = "macos")]
 fn apply_chromium_macos(
     config: &ChromiumConfig,
@@ -278,7 +278,8 @@ fn apply_chromium_macos(
     dry_run: bool,
 ) -> Result<()> {
     use crate::platform::macos::{
-        apply_plist_policy_with_preview, bool_to_plist, integer_to_plist, string_vec_to_plist_array,
+        bool_to_plist, install_managed_preferences_profile_for_domains, integer_to_plist,
+        json_to_plist, string_vec_to_plist_array,
     };
     use std::collections::HashMap;
 
@@ -336,52 +337,50 @@ fn apply_chromium_macos(
         );
     }
 
-    apply_plist_policy_with_preview(browser_config.bundle_id, updates, dry_run).with_context(
-        || {
-            format!(
-                "Failed to apply {} plist policy",
-                browser_config.browser_name
-            )
-        },
-    )?;
+    let mut managed_domains = vec![(browser_config.bundle_id.to_string(), updates)];
 
-    // Apply extension settings if configured
-    if !dry_run {
-        for ext in &config.extensions {
-            if !ext.settings.is_empty() {
-                use crate::platform::macos::write_extension_settings_plist;
+    for ext in &config.extensions {
+        if ext.settings.is_empty() {
+            continue;
+        }
 
-                write_extension_settings_plist(browser_config.bundle_id, &ext.id, &ext.settings)
-                    .with_context(|| {
-                        format!(
-                            "Failed to apply settings for {} extension {}",
-                            browser_config.browser_name, ext.name
-                        )
-                    })?;
-
-                tracing::debug!(
-                    "Applied settings for {} extension: {}",
+        let extension_domain = format!("{}.extensions.{}", browser_config.bundle_id, ext.id);
+        let mut extension_updates = HashMap::new();
+        for (key, value) in &ext.settings {
+            if let Some(plist_value) = json_to_plist(value) {
+                extension_updates.insert(key.clone(), plist_value);
+            } else {
+                tracing::warn!(
+                    "Could not convert setting {} for {} extension {} to plist value",
+                    key,
                     browser_config.browser_name,
                     ext.name
                 );
             }
         }
-    } else {
-        // Show extension settings in dry-run mode
-        for ext in &config.extensions {
-            if !ext.settings.is_empty() {
-                println!(
-                    "Extension Settings Plist: /Library/Managed Preferences/{}.extensions.{}.plist",
-                    browser_config.bundle_id, ext.id
-                );
-                println!("  Extension: {}", ext.name);
-                for (key, value) in &ext.settings {
-                    println!("  + {}: {:?}", key, value);
-                }
-                println!();
-            }
+
+        if !extension_updates.is_empty() {
+            tracing::debug!(
+                "Adding {} extension managed-storage profile domain: {}",
+                browser_config.browser_name,
+                extension_domain
+            );
+            managed_domains.push((extension_domain, extension_updates));
         }
     }
+
+    install_managed_preferences_profile_for_domains(
+        browser_config.bundle_id,
+        browser_config.browser_name,
+        managed_domains,
+        dry_run,
+    )
+    .with_context(|| {
+        format!(
+            "Failed to install {} macOS configuration profile",
+            browser_config.browser_name
+        )
+    })?;
 
     Ok(())
 }
@@ -581,7 +580,9 @@ fn remove_chromium_windows(browser_config: &ChromiumBrowserConfig) -> Result<()>
 /// Remove Chromium policies on macOS
 #[cfg(target_os = "macos")]
 fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
-    use crate::platform::macos::{remove_all_extension_settings_plists, remove_plist_keys};
+    use crate::platform::macos::{
+        remove_all_extension_settings_plists, remove_managed_preferences_profile, remove_plist_keys,
+    };
 
     tracing::debug!("Removing {} policies on macOS", browser_config.browser_name);
 
@@ -604,6 +605,14 @@ fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
             browser_config.browser_name
         )
     })?;
+
+    if let Err(e) = remove_managed_preferences_profile(browser_config.bundle_id) {
+        tracing::warn!(
+            "Failed to remove {} macOS configuration profile: {}",
+            browser_config.browser_name,
+            e
+        );
+    }
 
     // Remove all extension settings plists
     if let Err(e) = remove_all_extension_settings_plists(browser_config.bundle_id) {
