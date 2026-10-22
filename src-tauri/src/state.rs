@@ -306,6 +306,7 @@ mod tests {
                 disable_private_mode: Some(true),
                 disable_guest_mode: None,
                 allow_deleting_browser_history: None,
+                firefox_extension_settings: HashMap::new(),
                 extensions: vec![ExtensionEntry {
                     name: "Test".to_string(),
                     id: BrowserIdMap::Single("test123".to_string()),
@@ -429,6 +430,7 @@ mod tests {
                 disable_private_mode: None,
                 disable_guest_mode: None,
                 allow_deleting_browser_history: None,
+                firefox_extension_settings: HashMap::new(),
                 extensions: vec![],
             }],
         };
@@ -593,6 +595,7 @@ mod tests {
                 disable_private_mode: Some(true),
                 disable_guest_mode: Some(false),
                 allow_deleting_browser_history: None,
+                firefox_extension_settings: HashMap::new(),
                 extensions: vec![],
             }],
         };

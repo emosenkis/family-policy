@@ -21,11 +21,12 @@ pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<B
     let policy_target = policy_path.display().to_string();
 
     tracing::debug!(
-        "Preparing Firefox policy application: platform={}, dry_run={}, policy_target={}, extensions={}, disable_private_browsing={:?}",
+        "Preparing Firefox policy application: platform={}, dry_run={}, policy_target={}, extensions={}, extension_settings={}, disable_private_browsing={:?}",
         crate::browser::current_platform().name(),
         dry_run,
         policy_target,
         config.extensions.len(),
+        config.extension_settings.len(),
         config.disable_private_browsing
     );
 
@@ -247,8 +248,8 @@ fn create_firefox_policies_json(config: &FirefoxConfig) -> Result<serde_json::Va
     let mut policies = json!({});
 
     // Add extension settings
-    if !config.extensions.is_empty() {
-        let mut extension_settings = json!({});
+    if !config.extensions.is_empty() || !config.extension_settings.is_empty() {
+        let mut extension_settings = serde_json::Map::new();
 
         for ext in &config.extensions {
             let install_url = ext.install_url.as_ref().ok_or_else(|| {
@@ -261,17 +262,24 @@ fn create_firefox_policies_json(config: &FirefoxConfig) -> Result<serde_json::Va
                 install_url
             );
 
-            extension_settings[&ext.id] = json!({
-                "installation_mode": "force_installed",
-                "install_url": install_url,
-            });
+            extension_settings.insert(
+                ext.id.clone(),
+                json!({
+                    "installation_mode": "force_installed",
+                    "install_url": install_url,
+                }),
+            );
+        }
+
+        for (id, settings) in &config.extension_settings {
+            extension_settings.insert(id.clone(), settings.clone());
         }
 
         tracing::debug!(
             "Firefox ExtensionSettings generated for {} extensions",
-            config.extensions.len()
+            extension_settings.len()
         );
-        policies["ExtensionSettings"] = extension_settings;
+        policies["ExtensionSettings"] = serde_json::Value::Object(extension_settings);
     }
 
     // Add privacy controls
@@ -315,7 +323,7 @@ fn create_firefox_policies_plist(
         Value::Boolean(true),
     );
 
-    if !config.extensions.is_empty() {
+    if !config.extensions.is_empty() || !config.extension_settings.is_empty() {
         let mut extension_settings = plist::Dictionary::new();
 
         for ext in &config.extensions {
@@ -334,6 +342,10 @@ fn create_firefox_policies_plist(
             );
 
             extension_settings.insert(ext.id.clone(), Value::Dictionary(extension_policy));
+        }
+
+        for (id, settings) in &config.extension_settings {
+            extension_settings.insert(id.clone(), plist::to_value(settings)?);
         }
 
         policies.insert(
@@ -365,6 +377,7 @@ mod tests {
                 install_url: Some("https://example.com/extension.xpi".to_string()),
                 settings: HashMap::new(),
             }],
+            extension_settings: HashMap::new(),
             disable_private_browsing: Some(true),
         };
 
@@ -388,6 +401,7 @@ mod tests {
                 install_url: Some("https://example.com/extension.xpi".to_string()),
                 settings: HashMap::new(),
             }],
+            extension_settings: HashMap::new(),
             disable_private_browsing: None,
         };
 
@@ -407,6 +421,7 @@ mod tests {
                 install_url: Some("https://example.com/extension.xpi".to_string()),
                 settings: HashMap::new(),
             }],
+            extension_settings: HashMap::new(),
             disable_private_browsing: Some(true),
         };
 

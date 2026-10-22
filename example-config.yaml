@@ -91,6 +91,23 @@ policies:
           chrome: pkehgijcmpdhfbdbbnkijodmdjhbjlgp
         force_installed: true
 
+  # ============================================================================
+  # Example 5: Firefox Extension Settings
+  # ============================================================================
+  # Block extensions by default, with explicit exceptions. Keys and values map
+  # directly to Firefox's ExtensionSettings policy.
+  - name: Firefox Extension Rules
+    browsers:
+      - firefox
+    firefox_extension_settings:
+      "*":
+        installation_mode: blocked
+        blocked_install_message: Contact a parent to request an extension.
+      "uBlock0@raymondhill.net":
+        installation_mode: force_installed
+      "bitwarden@bitwarden.com":
+        installation_mode: allowed
+
 # ============================================================================
 # Finding Extension IDs
 # ============================================================================

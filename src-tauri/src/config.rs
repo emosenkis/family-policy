@@ -29,6 +29,10 @@ pub struct PolicyEntry {
     // Extensions
     #[serde(default)]
     pub extensions: Vec<ExtensionEntry>,
+
+    /// Firefox ExtensionSettings entries keyed by extension ID or "*".
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub firefox_extension_settings: HashMap<String, serde_json::Value>,
 }
 
 /// Extension entry with browser-specific IDs and arbitrary settings
@@ -77,6 +81,7 @@ pub struct ChromeConfig {
 #[derive(Debug, Clone)]
 pub struct FirefoxConfig {
     pub extensions: Vec<Extension>,
+    pub extension_settings: HashMap<String, serde_json::Value>,
     pub disable_private_browsing: Option<bool>,
 }
 
@@ -149,6 +154,20 @@ fn validate_policy_entry(policy: &PolicyEntry) -> Result<()> {
         anyhow::bail!("Policy must specify at least one browser");
     }
 
+    if !policy.firefox_extension_settings.is_empty() {
+        if !policy.browsers.contains(&Browser::Firefox) {
+            anyhow::bail!("Firefox extension settings require the firefox browser");
+        }
+        for (id, settings) in &policy.firefox_extension_settings {
+            if id.is_empty() || !settings.is_object() {
+                anyhow::bail!(
+                    "Firefox ExtensionSettings entry '{}' must have an ID and an object value",
+                    id
+                );
+            }
+        }
+    }
+
     // Validate each extension
     for ext in &policy.extensions {
         validate_extension_entry(ext, &policy.browsers)
@@ -219,6 +238,7 @@ pub fn to_browser_configs(
 ) {
     let mut chrome_extensions = Vec::new();
     let mut firefox_extensions = Vec::new();
+    let mut firefox_extension_settings = HashMap::new();
     let mut edge_extensions = Vec::new();
 
     let mut chrome_disable_incognito = None;
@@ -231,6 +251,7 @@ pub fn to_browser_configs(
 
     // Process each policy entry
     for policy in &config.policies {
+        firefox_extension_settings.extend(policy.firefox_extension_settings.clone());
         // Process privacy settings
         for browser in &policy.browsers {
             match browser {
@@ -310,17 +331,18 @@ pub fn to_browser_configs(
         None
     };
 
-    let firefox_config =
-        if !firefox_extensions.is_empty() 
+    let firefox_config = if !firefox_extensions.is_empty()
+        || !firefox_extension_settings.is_empty()
         || firefox_disable_private_browsing.is_some()
     {
-            Some(FirefoxConfig {
-                extensions: firefox_extensions,
-                disable_private_browsing: firefox_disable_private_browsing,
-            })
-        } else {
-            None
-        };
+        Some(FirefoxConfig {
+            extensions: firefox_extensions,
+            extension_settings: firefox_extension_settings,
+            disable_private_browsing: firefox_disable_private_browsing,
+        })
+    } else {
+        None
+    };
 
     let edge_config = if !edge_extensions.is_empty()
         || edge_disable_inprivate.is_some()

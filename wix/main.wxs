@@ -12,7 +12,7 @@
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
 
     <?define ProductName = "Family Policy Agent" ?>
-    <?define ProductVersion = "0.1.0" ?>
+    <?define ProductVersion = "0.1.1" ?>
     <?define Manufacturer = "Family Policy Team" ?>
 
     <Product

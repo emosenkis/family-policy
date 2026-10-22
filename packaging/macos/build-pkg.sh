@@ -2,7 +2,7 @@
 # Build macOS PKG installer for family-policy
 set -e
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 IDENTIFIER="com.family-policy.pkg"
 
 # Accept binary path as first argument, default to target/release/family-policy
