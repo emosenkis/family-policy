@@ -7,16 +7,13 @@ use std::path::PathBuf;
 use crate::config::FirefoxConfig;
 use crate::state::BrowserState;
 
-#[cfg(target_os = "macos")]
-const FIREFOX_MACOS_BUNDLE_ID: &str = "org.mozilla.firefox";
-
 /// Apply Firefox policies (extensions and privacy controls)
 pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<BrowserState> {
     #[cfg(not(target_os = "macos"))]
     let policy_path = get_firefox_policy_path()?;
 
     #[cfg(target_os = "macos")]
-    let policy_target = "macOS managed preferences configuration profile".to_string();
+    let policy_target = "/Library/Preferences/org.mozilla.firefox.plist".to_string();
     #[cfg(not(target_os = "macos"))]
     let policy_target = policy_path.display().to_string();
 
@@ -58,17 +55,11 @@ pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<B
 
     #[cfg(target_os = "macos")]
     {
-        tracing::debug!(
-            "Skipping Firefox distribution policies.json on macOS; applying policies via managed preferences profile instead"
-        );
-        let policies_plist = create_firefox_policies_plist(config)?;
-        crate::platform::macos::install_managed_preferences_profile(
-            FIREFOX_MACOS_BUNDLE_ID,
-            "Firefox",
-            policies_plist,
+        crate::platform::macos::apply_firefox_preferences(
+            create_firefox_policies_plist(config)?,
             dry_run,
         )
-        .context("Failed to install Firefox macOS configuration profile")?;
+        .context("Failed to apply Firefox system-wide preferences")?;
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -97,7 +88,7 @@ pub fn apply_firefox_policies(config: &FirefoxConfig, dry_run: bool) -> Result<B
 pub fn remove_firefox_policies() -> Result<()> {
     #[cfg(target_os = "macos")]
     {
-        return remove_firefox_macos_policy_profile();
+        return crate::platform::macos::remove_firefox_preferences();
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -140,36 +131,6 @@ pub fn remove_firefox_policies() -> Result<()> {
 
         Ok(())
     }
-}
-
-#[cfg(target_os = "macos")]
-fn remove_firefox_macos_policy_profile() -> Result<()> {
-    use crate::platform::macos::{
-        remove_library_preferences_plist_keys, remove_managed_preferences_profile,
-    };
-
-    let keys = vec![
-        "EnterprisePoliciesEnabled".to_string(),
-        "ExtensionSettings".to_string(),
-        "DisablePrivateBrowsing".to_string(),
-    ];
-
-    remove_library_preferences_plist_keys(FIREFOX_MACOS_BUNDLE_ID, &keys)
-        .context("Failed to remove Firefox macOS policy defaults plist keys")?;
-
-    if let Err(e) = remove_managed_preferences_profile(FIREFOX_MACOS_BUNDLE_ID) {
-        tracing::warn!(
-            "Failed to remove Firefox macOS configuration profile: {}",
-            e
-        );
-    }
-
-    Ok(())
-}
-
-#[cfg(not(target_os = "macos"))]
-fn remove_firefox_macos_policy_profile() -> Result<()> {
-    Ok(())
 }
 
 /// Get platform-specific Firefox policy path
@@ -354,8 +315,11 @@ fn create_firefox_policies_plist(
         );
     }
 
-    if config.disable_private_browsing == Some(true) {
-        policies.insert("DisablePrivateBrowsing".to_string(), Value::Boolean(true));
+    if let Some(disable) = config.disable_private_browsing {
+        policies.insert(
+            "DisablePrivateBrowsing".to_string(),
+            Value::Boolean(disable),
+        );
     }
 
     Ok(policies)

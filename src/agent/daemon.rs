@@ -125,8 +125,8 @@ async fn check_and_apply_policy(config: &AgentConfig, dry_run: bool) -> Result<b
                 config::Config::from_yaml_str(&content).context("Failed to parse policy YAML")?;
 
             // Apply policies using existing logic
-            let applied_policies =
-                apply_policy_config(&policy_config, dry_run).context("Failed to apply policies")?;
+            let applied_policies = apply_policy_config(&policy_config, &state, dry_run)
+                .context("Failed to apply policies")?;
 
             // Update state (skip if dry-run)
             if !dry_run {
@@ -142,10 +142,18 @@ async fn check_and_apply_policy(config: &AgentConfig, dry_run: bool) -> Result<b
 }
 
 /// Apply policy configuration using policy module
-fn apply_policy_config(config: &config::Config, dry_run: bool) -> Result<AppliedPolicies> {
-    // Use the centralized policy application logic
-    // Note: Agent maintains its own state, so we don't use core::apply here
-    policy::apply_policies(config, None, dry_run).context("Failed to apply policies")
+fn apply_policy_config(
+    config: &config::Config,
+    current: &State,
+    dry_run: bool,
+) -> Result<AppliedPolicies> {
+    match policy::apply_policies(config, Some(current), dry_run) {
+        Ok(applied) => Ok(applied),
+        Err(error) => {
+            policy::persist_partial_failure(&error, Some(current), dry_run)?;
+            Err(error).context("Failed to apply policies")
+        }
+    }
 }
 
 /// Compute SHA-256 hash of YAML content

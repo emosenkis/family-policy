@@ -81,7 +81,7 @@ pub fn apply_policies_from_config_with_options(
     }
 
     // Load current state
-    let current_state = load_state().ok().flatten();
+    let current_state = load_state().context("Failed to load existing policy state")?;
     match &current_state {
         Some(state) => tracing::debug!(
             "Loaded existing state: state_hash={}, state_version={}, applied_chrome={}, applied_firefox={}, applied_edge={}",
@@ -135,8 +135,14 @@ pub fn apply_policies_from_config_with_options(
         );
     }
 
-    let applied_policies = policy::apply_policies(config, current_state.as_ref(), options.dry_run)
-        .context("Failed to apply policies")?;
+    let applied_policies =
+        match policy::apply_policies(config, current_state.as_ref(), options.dry_run) {
+            Ok(applied) => applied,
+            Err(error) => {
+                policy::persist_partial_failure(&error, current_state.as_ref(), options.dry_run)?;
+                return Err(error).context("Failed to apply policies");
+            }
+        };
 
     // Count what was applied
     if let Some(ref chrome) = applied_policies.chrome {
@@ -203,9 +209,7 @@ pub fn remove_all_policies(dry_run: bool) -> Result<RemovalResult> {
 
     // Actually remove policies using existing policy module
     if let Err(e) = policy::remove_policies(&current_state) {
-        result
-            .errors
-            .push(format!("Failed to remove policies: {}", e));
+        return Err(e).context("Failed to remove all policies; retaining state for retry");
     }
 
     // Remove state file

@@ -270,7 +270,7 @@ fn apply_chromium_windows(
     Ok(())
 }
 
-/// Apply Chromium policies on macOS (via configuration profile)
+/// Apply Chromium policies through machine-level Directory Service MCX.
 #[cfg(target_os = "macos")]
 fn apply_chromium_macos(
     config: &ChromiumConfig,
@@ -278,8 +278,7 @@ fn apply_chromium_macos(
     dry_run: bool,
 ) -> Result<()> {
     use crate::platform::macos::{
-        bool_to_plist, install_managed_preferences_profile_for_domains, integer_to_plist,
-        json_to_plist, string_vec_to_plist_array,
+        apply_mcx, bool_to_plist, integer_to_plist, json_to_plist, string_vec_to_plist_array,
     };
     use std::collections::HashMap;
 
@@ -305,20 +304,16 @@ fn apply_chromium_macos(
         );
     }
 
-    // Apply privacy controls
     if let Some(disable_private_mode) = config.disable_private_mode {
-        if disable_private_mode {
-            let key_name = if browser_config.browser_name == "Chrome" {
-                "IncognitoModeAvailability"
-            } else {
-                "InPrivateModeAvailability"
-            };
-
-            updates.insert(
-                key_name.to_string(),
-                integer_to_plist(1), // 1 = Disabled
-            );
-        }
+        let key = if browser_config.browser_name == "Chrome" {
+            "IncognitoModeAvailability"
+        } else {
+            "InPrivateModeAvailability"
+        };
+        updates.insert(
+            key.to_string(),
+            integer_to_plist(if disable_private_mode { 1 } else { 0 }),
+        );
     }
 
     // Apply guest mode control
@@ -350,10 +345,8 @@ fn apply_chromium_macos(
             if let Some(plist_value) = json_to_plist(value) {
                 extension_updates.insert(key.clone(), plist_value);
             } else {
-                tracing::warn!(
-                    "Could not convert setting {} for {} extension {} to plist value",
-                    key,
-                    browser_config.browser_name,
+                anyhow::bail!(
+                    "Cannot encode setting {key} for extension {} as a plist value",
                     ext.name
                 );
             }
@@ -369,15 +362,9 @@ fn apply_chromium_macos(
         }
     }
 
-    install_managed_preferences_profile_for_domains(
-        browser_config.bundle_id,
-        browser_config.browser_name,
-        managed_domains,
-        dry_run,
-    )
-    .with_context(|| {
+    apply_mcx(browser_config.bundle_id, managed_domains, dry_run).with_context(|| {
         format!(
-            "Failed to install {} macOS configuration profile",
+            "Failed to apply {} machine MCX policies",
             browser_config.browser_name
         )
     })?;
@@ -580,50 +567,12 @@ fn remove_chromium_windows(browser_config: &ChromiumBrowserConfig) -> Result<()>
 /// Remove Chromium policies on macOS
 #[cfg(target_os = "macos")]
 fn remove_chromium_macos(browser_config: &ChromiumBrowserConfig) -> Result<()> {
-    use crate::platform::macos::{
-        remove_all_extension_settings_plists, remove_managed_preferences_profile, remove_plist_keys,
-    };
-
-    tracing::debug!("Removing {} policies on macOS", browser_config.browser_name);
-
-    let privacy_key = if browser_config.browser_name == "Chrome" {
-        "IncognitoModeAvailability"
-    } else {
-        "InPrivateModeAvailability"
-    };
-
-    let keys = vec![
-        "ExtensionInstallForcelist".to_string(),
-        privacy_key.to_string(),
-        "BrowserGuestModeEnabled".to_string(),
-        "AllowDeletingBrowserHistory".to_string(),
-    ];
-
-    remove_plist_keys(browser_config.bundle_id, &keys).with_context(|| {
+    crate::platform::macos::remove_mcx(browser_config.bundle_id).with_context(|| {
         format!(
-            "Failed to remove {} plist keys",
+            "Failed to remove {} owned MCX policies",
             browser_config.browser_name
         )
-    })?;
-
-    if let Err(e) = remove_managed_preferences_profile(browser_config.bundle_id) {
-        tracing::warn!(
-            "Failed to remove {} macOS configuration profile: {}",
-            browser_config.browser_name,
-            e
-        );
-    }
-
-    // Remove all extension settings plists
-    if let Err(e) = remove_all_extension_settings_plists(browser_config.bundle_id) {
-        tracing::warn!(
-            "Failed to remove {} extension settings plists: {}",
-            browser_config.browser_name,
-            e
-        );
-    }
-
-    Ok(())
+    })
 }
 
 /// Remove Chromium policies on Linux

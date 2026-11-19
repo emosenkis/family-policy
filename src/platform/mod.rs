@@ -6,7 +6,7 @@ pub mod common;
 pub mod windows;
 
 /// macOS-specific operations (plist)
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", test))]
 pub mod macos;
 
 /// Linux-specific operations (JSON policies)

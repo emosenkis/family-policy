@@ -40,6 +40,12 @@ jobs:
       - run: cargo fmt --check
       - run: cargo test --locked --target ${{ matrix.target }}
       - run: cargo build --locked --release --target ${{ matrix.target }}
+      - name: Verify macOS policy ownership and rollback
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          test_binary=$(cargo test --locked --target ${{ matrix.target }} --no-run --message-format=json | python3 -c 'import json,sys; print(next(item["executable"] for item in map(json.loads, sys.stdin) if item.get("reason") == "compiler-artifact" and item["target"]["name"] == "family-policy" and item["profile"]["test"] and item.get("executable")))')
+          sudo "$test_binary" --ignored --exact platform::macos::system::tests::native_mcx_and_firefox_roundtrip --nocapture
       - name: Verify Unix service lifecycle
         if: runner.os != 'Windows'
         run: sudo bash .github/scripts/test-service.sh "$PWD/target/${{ matrix.target }}/release/family-policy"

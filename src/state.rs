@@ -17,6 +17,9 @@ const STATE_VERSION: &str = "1.0";
 pub struct State {
     pub version: String,
     pub config_hash: String,
+    #[cfg(target_os = "macos")]
+    #[serde(default)]
+    pub macos_policy_backend: String,
     pub last_updated: DateTime<Utc>,
     pub applied_policies: AppliedPolicies,
 
@@ -44,6 +47,8 @@ impl State {
         Self {
             version: STATE_VERSION.to_string(),
             config_hash: String::new(),
+            #[cfg(target_os = "macos")]
+            macos_policy_backend: "local-mcx-v1".into(),
             last_updated: Utc::now(),
             applied_policies: AppliedPolicies::default(),
             machine_id: Uuid::new_v4().to_string(),
@@ -65,10 +70,28 @@ impl State {
         applied_policies: AppliedPolicies,
     ) {
         self.config_hash = config_hash;
+        #[cfg(target_os = "macos")]
+        {
+            self.macos_policy_backend = "local-mcx-v1".into();
+        }
         self.last_updated = Utc::now();
         self.last_checked = Some(Utc::now());
         self.etag = etag;
         self.applied_policies = applied_policies;
+    }
+
+    pub fn mark_partial_application(&mut self, successes: &AppliedPolicies) {
+        if let Some(ref chrome) = successes.chrome {
+            self.applied_policies.chrome = Some(chrome.clone());
+        }
+        if let Some(ref firefox) = successes.firefox {
+            self.applied_policies.firefox = Some(firefox.clone());
+        }
+        if let Some(ref edge) = successes.edge {
+            self.applied_policies.edge = Some(edge.clone());
+        }
+        self.config_hash.clear();
+        self.etag = None;
     }
 
     /// Update ETag without applying policy (agent mode)
@@ -189,7 +212,7 @@ pub fn load_state() -> Result<Option<State>> {
     let content = std::fs::read_to_string(&state_path)
         .with_context(|| format!("Failed to read state file: {}", state_path.display()))?;
 
-    let state: State = serde_json::from_str(&content)
+    let mut state: State = serde_json::from_str(&content)
         .with_context(|| format!("Failed to parse state file: {}", state_path.display()))?;
 
     // Validate state version
@@ -199,6 +222,13 @@ pub fn load_state() -> Result<Option<State>> {
             STATE_VERSION, state.version
         );
         return Ok(None);
+    }
+
+    // Older macOS hashes describe the unsupported profile backend, so retry once.
+    #[cfg(target_os = "macos")]
+    if state.macos_policy_backend != "local-mcx-v1" {
+        state.config_hash.clear();
+        state.etag = None;
     }
 
     Ok(Some(state))
@@ -268,6 +298,8 @@ pub fn create_state(config: &Config, applied_policies: AppliedPolicies) -> Resul
     Ok(State {
         version: STATE_VERSION.to_string(),
         config_hash: compute_config_hash(config)?,
+        #[cfg(target_os = "macos")]
+        macos_policy_backend: "local-mcx-v1".into(),
         last_updated: Utc::now(),
         applied_policies,
         machine_id: Uuid::new_v4().to_string(),
@@ -331,6 +363,29 @@ mod tests {
     }
 
     // BrowserState Tests
+
+    #[test]
+    fn partial_failure_invalidates_hash_and_etag_but_preserves_prior_browser_tracking() {
+        let mut state = State::new_agent();
+        state.config_hash = "previously-successful-hash".into();
+        state.etag = Some("old-etag".into());
+        let mut chrome = BrowserState::new();
+        chrome.extensions.push("old-extension".into());
+        state.applied_policies.chrome = Some(chrome);
+        let successes = AppliedPolicies {
+            firefox: Some(BrowserState::new()),
+            ..Default::default()
+        };
+        state.mark_partial_application(&successes);
+        assert!(state.config_hash.is_empty());
+        assert!(state.etag.is_none());
+        assert_eq!(
+            state.applied_policies.chrome.unwrap().extensions,
+            vec!["old-extension"]
+        );
+        assert!(state.applied_policies.firefox.is_some());
+        assert!(state.applied_policies.edge.is_none());
+    }
 
     #[test]
     fn browser_state_new_creates_empty_state() {
