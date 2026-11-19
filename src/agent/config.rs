@@ -219,6 +219,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn saved_agent_config_roundtrips_with_restricted_permissions() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("agent.conf");
+        let config = AgentConfig::load(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("agent.conf.example"),
+        )
+        .unwrap();
+        config.save(&path).unwrap();
+        let loaded = AgentConfig::load(&path).unwrap();
+        assert_eq!(loaded.github.policy_url, config.github.policy_url);
+        assert_eq!(loaded.agent.poll_interval, config.agent.poll_interval);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+    }
+
+    #[test]
     fn checked_in_agent_config_matches_schema() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("agent.conf.example");
         AgentConfig::load(&path).unwrap();
