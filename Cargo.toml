@@ -1,6 +1,6 @@
 [package]
 name = "family-policy"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Browser Extension Policy Manager - Manages browser policies and privacy controls"
 homepage = "https://github.com/emosenkis/family-policy"
