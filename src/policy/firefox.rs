@@ -332,6 +332,28 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    fn macos_preferences_include_false_values_and_custom_extension_settings() {
+        let config = FirefoxConfig {
+            extensions: vec![],
+            extension_settings: HashMap::from([(
+                "*".into(),
+                serde_json::json!({"installation_mode":"blocked"}),
+            )]),
+            disable_private_browsing: Some(false),
+        };
+        let policies = create_firefox_policies_plist(&config).unwrap();
+        assert_eq!(policies["EnterprisePoliciesEnabled"], Value::Boolean(true));
+        assert_eq!(policies["DisablePrivateBrowsing"], Value::Boolean(false));
+        assert_eq!(
+            policies["ExtensionSettings"].as_dictionary().unwrap()["*"]
+                .as_dictionary()
+                .unwrap()["installation_mode"]
+                .as_string(),
+            Some("blocked")
+        );
+    }
+
+    #[test]
     fn test_create_firefox_policies_json() {
         let config = FirefoxConfig {
             extensions: vec![Extension {

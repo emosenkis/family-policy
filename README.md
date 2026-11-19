@@ -64,3 +64,25 @@ cargo build --locked --release
 CI tests and builds native Linux x86_64, Windows x86_64, and macOS ARM64 binaries. A version tag publishes binaries and SHA-256 checksums only after all three platforms pass.
 
 Browser policy changes require administrator privileges. Preview a policy before applying it and restart browsers after changes.
+
+## macOS policy application
+
+Chrome and Edge use machine-level MCX settings in Directory Service's
+`/Computers/local_computer` record, including separate extension-managed domains.
+Firefox uses enterprise preferences in `/Library/Preferences/org.mozilla.firefox.plist`.
+No configuration profile is installed, and Firefox's app bundle is not modified.
+
+The first apply after upgrading from the profile backend retries even if the policy
+YAML is unchanged. Ownership receipts under `/Library/Application Support/browser-extension-policy/macos-ownership`
+allow reapply and uninstall to preserve unrelated settings. Conflicting settings
+from another manager cause an error rather than being overwritten. Existing profiles
+and manually written managed-preferences caches are left intact.
+
+Each configured browser is attempted even if another fails. Partial failures keep
+successful browser tracking and clear the saved hash and ETag so the next run retries.
+Dry runs do not modify policies or ownership receipts.
+
+After applying, reload `chrome://policy` / `edge://policy` and check the configured
+policies and extension-managed settings. Restart Firefox and check `about:policies`.
+Native CI verifies Directory Service and preference writes, reapply, ownership,
+rollback, and removal; it does not replace checking browser behavior on your Mac.

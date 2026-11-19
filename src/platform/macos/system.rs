@@ -277,7 +277,13 @@ impl Backend {
     }
 }
 
-fn apply_owned(owner: &str, desired: Dictionary, backend: Backend, dry_run: bool) -> Result<()> {
+fn apply_owned(
+    owner: &str,
+    desired: Dictionary,
+    backend: Backend,
+    dry_run: bool,
+    refresh: impl Fn(&Backend) -> Result<()>,
+) -> Result<()> {
     if dry_run {
         println!("macOS {} policy values (dry run): {desired:#?}", owner);
         return Ok(());
@@ -292,7 +298,7 @@ fn apply_owned(owner: &str, desired: Dictionary, backend: Backend, dry_run: bool
     let (after, next_receipt) = reconcile_owned(&before, &receipt, &desired)?;
     let result = (|| -> Result<()> {
         backend.write(&before, &after)?;
-        backend.refresh()?;
+        refresh(&backend)?;
         if backend.read()? != after {
             anyhow::bail!("macOS policy readback did not match the requested update");
         }
@@ -307,7 +313,7 @@ fn apply_owned(owner: &str, desired: Dictionary, backend: Backend, dry_run: bool
                 rollback_target(&current, &before, &after)
                     .and_then(|target| backend.write(&current, &target))
             })
-            .and_then(|_| backend.refresh());
+            .and_then(|_| refresh(&backend));
         let receipt_rollback = write_dictionary(&receipt_path, &receipt);
         anyhow::bail!(
             "macOS policy update failed: {error:#}; rollback: {rollback:?}; receipt rollback: {receipt_rollback:?}"
@@ -324,10 +330,22 @@ pub fn apply_mcx(
     domains: Vec<(String, HashMap<String, Value>)>,
     dry_run: bool,
 ) -> Result<()> {
-    apply_owned(owner, encode_mcx(domains), Backend::Mcx, dry_run)
+    apply_owned(
+        owner,
+        encode_mcx(domains),
+        Backend::Mcx,
+        dry_run,
+        Backend::refresh,
+    )
 }
 pub fn remove_mcx(owner: &str) -> Result<()> {
-    apply_owned(owner, Dictionary::new(), Backend::Mcx, false)
+    apply_owned(
+        owner,
+        Dictionary::new(),
+        Backend::Mcx,
+        false,
+        Backend::refresh,
+    )
 }
 pub fn apply_firefox_preferences(settings: HashMap<String, Value>, dry_run: bool) -> Result<()> {
     let mut desired = Dictionary::new();
@@ -335,10 +353,22 @@ pub fn apply_firefox_preferences(settings: HashMap<String, Value>, dry_run: bool
         FIREFOX.into(),
         Value::Dictionary(settings.into_iter().collect()),
     );
-    apply_owned(FIREFOX, desired, Backend::Firefox, dry_run)
+    apply_owned(
+        FIREFOX,
+        desired,
+        Backend::Firefox,
+        dry_run,
+        Backend::refresh,
+    )
 }
 pub fn remove_firefox_preferences() -> Result<()> {
-    apply_owned(FIREFOX, Dictionary::new(), Backend::Firefox, false)
+    apply_owned(
+        FIREFOX,
+        Dictionary::new(),
+        Backend::Firefox,
+        false,
+        Backend::refresh,
+    )
 }
 
 #[cfg(test)]
@@ -363,8 +393,8 @@ mod tests {
             "Unrelated".into(),
             Value::Dictionary(
                 [
-                    ("state".into(), Value::String("always".into())),
-                    ("value".into(), Value::Boolean(true)),
+                    ("state".to_string(), Value::String("always".into())),
+                    ("value".to_string(), Value::Boolean(true)),
                 ]
                 .into_iter()
                 .collect(),
@@ -402,6 +432,25 @@ mod tests {
                 .contains_key("Rules")
         );
         apply_mcx(owner, domains(), false).unwrap();
+        assert_eq!(applied, read_mcx().unwrap());
+
+        let fail_once = std::cell::Cell::new(true);
+        let update = encode_mcx(vec![(
+            domain.into(),
+            HashMap::from([("Owned".into(), Value::Boolean(false))]),
+        )]);
+        let failed = apply_owned(owner, update, Backend::Mcx, false, |backend| {
+            if fail_once.replace(false) {
+                anyhow::bail!("simulated refresh failure");
+            }
+            backend.refresh()
+        });
+        assert!(
+            failed
+                .unwrap_err()
+                .to_string()
+                .contains("simulated refresh failure")
+        );
         assert_eq!(applied, read_mcx().unwrap());
 
         // Force a failure after the import, then check the old working values survived.
