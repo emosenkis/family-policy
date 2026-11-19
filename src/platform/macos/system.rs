@@ -1,5 +1,6 @@
 use super::*;
 use std::fs::{self, File, OpenOptions};
+use std::io::Write;
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
@@ -49,7 +50,20 @@ fn read_dictionary(path: &Path) -> Result<Dictionary> {
 fn write_dictionary(path: &Path, dict: &Dictionary) -> Result<()> {
     let mut data = Vec::new();
     Value::Dictionary(dict.clone()).to_writer_xml(&mut data)?;
-    crate::platform::atomic_write(path, &data)
+    // The general atomic writer makes its parent public; ownership receipts stay private.
+    let temporary = path.with_extension("tmp");
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&temporary)?;
+    crate::platform::set_file_permissions(&temporary, 0o600)?;
+    file.set_len(0)?;
+    file.write_all(&data)?;
+    file.sync_all()?;
+    fs::rename(&temporary, path)?;
+    Ok(())
 }
 fn lock() -> Result<File> {
     // Serialize CLI and daemon updates so their receipts cannot race.
@@ -274,6 +288,10 @@ impl Backend {
                     ],
                 )?;
                 fs::remove_file(path)?;
+                let preferences = Path::new("/Library/Preferences/org.mozilla.firefox.plist");
+                if preferences.exists() {
+                    crate::platform::set_file_permissions(preferences, 0o644)?;
+                }
                 Ok(())
             }
         }
