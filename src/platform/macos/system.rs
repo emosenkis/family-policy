@@ -518,6 +518,14 @@ mod tests {
         let state_path = crate::state::get_state_path().unwrap();
         let saved_state = fs::read(&state_path).ok();
         let original_mcx = read_mcx().unwrap();
+        let mut legacy = crate::state::State::new_agent();
+        legacy.config_hash = "legacy-profile-hash".into();
+        legacy.etag = Some("legacy-profile-etag".into());
+        legacy.macos_policy_backend.clear();
+        crate::state::save_state(&legacy).unwrap();
+        let migrated = crate::state::load_state().unwrap().unwrap();
+        assert!(migrated.config_hash.is_empty());
+        assert!(migrated.etag.is_none());
         let config = crate::config::Config::from_yaml_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/fixtures/macos-policy.yaml"

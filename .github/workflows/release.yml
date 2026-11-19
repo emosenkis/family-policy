@@ -44,7 +44,7 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          test_binary=$(cargo test --locked --target ${{ matrix.target }} --no-run --message-format=json | python3 -c 'import json,sys; print(next(item["executable"] for item in map(json.loads, sys.stdin) if item.get("reason") == "compiler-artifact" and item["target"]["name"] == "family-policy" and item["profile"]["test"] and item.get("executable")))')
+          test_binary=$(cargo test --locked --target ${{ matrix.target }} --no-run --message-format=json | python3 -c 'import json,sys; items=[json.loads(line) for line in sys.stdin]; print(next(item["executable"] for item in items if item.get("reason") == "compiler-artifact" and item["target"]["name"] == "family-policy" and item["profile"]["test"] and item.get("executable")))')
           sudo "$test_binary" --ignored --exact platform::macos::system::tests::native_mcx_and_firefox_roundtrip --nocapture
       - name: Verify Unix service lifecycle
         if: runner.os != 'Windows'
