@@ -1,6 +1,6 @@
 [Unit]
 Description=Family Policy Agent - Browser Extension Policy Management
-Documentation=https://github.com/username/family-policy
+Documentation=https://github.com/emosenkis/family-policy
 After=network-online.target
 Wants=network-online.target
 
@@ -14,9 +14,8 @@ User=root
 # Security hardening
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
+ProtectSystem=false
 ProtectHome=true
-ReadWritePaths=/var/lib/browser-extension-policy /etc/family-policy
 
 # Logging
 StandardOutput=journal

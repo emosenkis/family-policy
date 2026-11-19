@@ -1,0 +1,16 @@
+# Agent TOML configuration (not policy YAML). setup writes this schema.
+[github]
+policy_url = "https://raw.githubusercontent.com/emosenkis/family-policy/main/browser-policy.yaml"
+# access_token = "YOUR_TOKEN" # only for private repositories
+
+[agent]
+poll_interval = 300
+poll_jitter = 60
+retry_interval = 60
+max_retries = 3
+
+[logging]
+level = "info"
+
+[security]
+require_signature = false

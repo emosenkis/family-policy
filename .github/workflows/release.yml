@@ -1,79 +1,78 @@
-name: Release Builds
+name: Rust CI and Releases
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  publish-tauri:
-    name: Build (${{ matrix.platform }})
-    permissions:
-      contents: write
+  build:
+    name: Test and build (${{ matrix.target }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          # - platform: 'macos-latest'
-          #   args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
-          - platform: 'ubuntu-22.04'
-            args: ''
-          - platform: 'windows-latest'
-            args: ''
-
+          - platform: macos-14
+            target: aarch64-apple-darwin
+            suffix: ''
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            suffix: ''
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: '.exe'
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-
-      - name: Install system dependencies (Ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
+          targets: ${{ matrix.target }}
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo test --locked --target ${{ matrix.target }}
+      - run: cargo build --locked --release --target ${{ matrix.target }}
+      - name: Verify Unix service lifecycle
+        if: runner.os != 'Windows'
+        run: sudo bash .github/scripts/test-service.sh "$PWD/target/${{ matrix.target }}/release/family-policy"
+      - name: Verify Windows service lifecycle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/test-service.ps1 -Binary "$PWD/target/${{ matrix.target }}/release/family-policy.exe"
+      - name: Name release binary
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          mkdir -p artifacts
+          cp target/${{ matrix.target }}/release/family-policy${{ matrix.suffix }} artifacts/family-policy-${{ matrix.target }}${{ matrix.suffix }}
+      - uses: actions/upload-artifact@v4
         with:
-          node-version: lts/*
+          name: family-policy-${{ matrix.target }}
+          path: artifacts/*
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          version: 10
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build and publish release
-        uses: tauri-apps/tauri-action@v0
+          path: artifacts
+          merge-multiple: true
+      - name: Publish verified binaries
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tauriScript: pnpm tauri
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Family Policy {0}', github.ref_name) || '' }}
-          releaseBody: 'See the assets below to download and install this version.'
-          releaseDraft: false
-          prerelease: false
-          generateReleaseNotes: true
-          args: ${{ matrix.args }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd artifacts
+          sha256sum family-policy-* > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Family Policy $GITHUB_REF_NAME" --generate-notes ./*
