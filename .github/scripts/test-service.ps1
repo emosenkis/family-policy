@@ -6,6 +6,8 @@ function Invoke-Cli {
 }
 # A closed local port exercises service startup without applying browser policies.
 Invoke-Cli setup --url https://127.0.0.1:9/policy.yaml
+& $Binary setup --url https://127.0.0.1:9/replacement.yaml
+if ($LASTEXITCODE -eq 0) { throw 'setup overwrote existing configuration without --force' }
 Invoke-Cli install-service
 Invoke-Cli start
 $service = Get-Service FamilyPolicyAgent
@@ -17,5 +19,6 @@ Invoke-Cli start
 $service.WaitForStatus('Running', [TimeSpan]::FromSeconds(20))
 Invoke-Cli stop
 $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
+$service.Dispose()
 Invoke-Cli uninstall-service
 if (Get-Service FamilyPolicyAgent -ErrorAction SilentlyContinue) { throw 'Service was not removed' }
