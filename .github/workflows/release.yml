@@ -53,11 +53,16 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./.github/scripts/test-service.ps1 -Binary "$PWD/target/${{ matrix.target }}/release/family-policy.exe"
-      - name: Name release binary
+      - name: Package release binary
         shell: bash
         run: |
           mkdir -p artifacts
-          cp target/${{ matrix.target }}/release/family-policy${{ matrix.suffix }} artifacts/family-policy-${{ matrix.target }}${{ matrix.suffix }}
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp target/${{ matrix.target }}/release/family-policy.exe artifacts/family-policy.exe
+          else
+            chmod +x target/${{ matrix.target }}/release/family-policy
+            tar -czf artifacts/family-policy-${{ matrix.target }}.tar.gz -C target/${{ matrix.target }}/release family-policy
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: family-policy-${{ matrix.target }}
@@ -80,5 +85,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd artifacts
-          sha256sum family-policy-* > SHA256SUMS
+          sha256sum family-policy* > SHA256SUMS
           gh release create "$GITHUB_REF_NAME" --verify-tag --title "Family Policy $GITHUB_REF_NAME" --generate-notes ./*

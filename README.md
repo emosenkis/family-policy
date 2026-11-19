@@ -2,7 +2,7 @@
 
 A Rust CLI and system service for managing Chrome, Firefox, and Edge extension and privacy policies on Linux, macOS, and Windows. There is no GUI or Node.js dependency.
 
-Download a binary from [Releases](https://github.com/emosenkis/family-policy/releases), rename it to `family-policy` (`family-policy.exe` on Windows), and on Unix run `chmod +x family-policy`. The macOS binary is native Apple Silicon (including M4).
+Download the archive for Linux or macOS from [Releases](https://github.com/emosenkis/family-policy/releases) and extract it with `tar -xzf family-policy-<target>.tar.gz`. It contains the executable `family-policy`, with execute permissions preserved. On Windows, download `family-policy.exe` directly. The macOS binary is native Apple Silicon (including M4).
 
 Build from source with `cargo build --release`; the binary is in `target/release/`.
 
