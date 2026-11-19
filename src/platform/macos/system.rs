@@ -495,5 +495,117 @@ mod tests {
         assert_eq!(applied, backend.read().unwrap());
         remove_firefox_preferences().unwrap();
         assert_eq!(original, backend.read().unwrap());
+
+        // Exercise actual browser dispatch, partial-state retries, and complete macOS keys.
+        let state_path = crate::state::get_state_path().unwrap();
+        let saved_state = fs::read(&state_path).ok();
+        let original_mcx = read_mcx().unwrap();
+        let config = crate::config::Config::from_yaml_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/macos-policy.yaml"
+        )))
+        .unwrap();
+        let conflict_owner = "com.family-policy.ci.conflict";
+        apply_mcx(
+            conflict_owner,
+            vec![(
+                "com.google.Chrome".into(),
+                HashMap::from([("IncognitoModeAvailability".into(), Value::Integer(0.into()))]),
+            )],
+            false,
+        )
+        .unwrap();
+        let previous = crate::state::load_state().unwrap();
+        let error = crate::policy::apply_policies(&config, previous.as_ref(), false).unwrap_err();
+        let failure = error
+            .downcast_ref::<crate::policy::PolicyApplyError>()
+            .unwrap();
+        assert!(failure.applied.chrome.is_none());
+        assert!(failure.applied.firefox.is_some());
+        assert!(failure.applied.edge.is_some());
+        crate::policy::persist_partial_failure(&error, previous.as_ref(), false).unwrap();
+        let partial = crate::state::load_state().unwrap().unwrap();
+        assert!(partial.config_hash.is_empty());
+        assert!(partial.etag.is_none());
+        assert!(partial.applied_policies.firefox.is_some());
+        assert!(partial.applied_policies.edge.is_some());
+        remove_mcx(conflict_owner).unwrap();
+        crate::core::apply::apply_policies_from_config(&config, false).unwrap();
+        let policies = read_mcx().unwrap();
+        for (domain, private_key) in [
+            ("com.google.Chrome", "IncognitoModeAvailability"),
+            ("com.microsoft.Edge", "InPrivateModeAvailability"),
+        ] {
+            let values = policies[domain].as_dictionary().unwrap();
+            assert_eq!(
+                values[private_key].as_dictionary().unwrap()["value"],
+                Value::Integer(1.into())
+            );
+            assert_eq!(
+                values["BrowserGuestModeEnabled"].as_dictionary().unwrap()["value"],
+                Value::Boolean(false)
+            );
+            assert_eq!(
+                values["AllowDeletingBrowserHistory"]
+                    .as_dictionary()
+                    .unwrap()["value"],
+                Value::Boolean(false)
+            );
+            assert_eq!(
+                values["ExtensionInstallForcelist"].as_dictionary().unwrap()["value"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                1
+            );
+            let extension = policies
+                [&format!("{domain}.extensions.ddkjiahejlhfcafbddmgiahcphecmpfh")]
+                .as_dictionary()
+                .unwrap();
+            assert_eq!(
+                extension["defaultFiltering"].as_dictionary().unwrap()["value"].as_string(),
+                Some("optimal")
+            );
+            assert!(
+                extension["rulesets"].as_dictionary().unwrap()["value"]
+                    .as_array()
+                    .is_some()
+            );
+        }
+        let firefox = backend.read().unwrap();
+        let firefox = firefox[FIREFOX].as_dictionary().unwrap();
+        assert_eq!(firefox["EnterprisePoliciesEnabled"], Value::Boolean(true));
+        assert_eq!(firefox["DisablePrivateBrowsing"], Value::Boolean(true));
+        assert!(
+            firefox["ExtensionSettings"]
+                .as_dictionary()
+                .unwrap()
+                .contains_key("*")
+        );
+        assert!(
+            firefox["ExtensionSettings"]
+                .as_dictionary()
+                .unwrap()
+                .contains_key("uBOLite@raymondhill.net")
+        );
+        let state_before_dry_run = fs::read(&state_path).unwrap();
+        crate::core::apply::apply_policies_from_config(&config, true).unwrap();
+        assert_eq!(state_before_dry_run, fs::read(&state_path).unwrap());
+        assert_eq!(policies, read_mcx().unwrap());
+        crate::core::apply::apply_policies_from_config_with_options(
+            &config,
+            crate::core::apply::ApplyOptions {
+                force: true,
+                dry_run: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(policies, read_mcx().unwrap());
+        crate::core::apply::remove_all_policies(false).unwrap();
+        assert_eq!(original_mcx, read_mcx().unwrap());
+        assert_eq!(original, backend.read().unwrap());
+        if let Some(content) = saved_state {
+            crate::platform::atomic_write(&state_path, &content).unwrap();
+        }
     }
 }

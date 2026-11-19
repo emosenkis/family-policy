@@ -1,0 +1,20 @@
+policies:
+  - name: Complete macOS browser policy regression fixture
+    browsers: [chrome, firefox, edge]
+    disable_private_mode: true
+    disable_guest_mode: true
+    allow_deleting_browser_history: false
+    extensions:
+      - name: uBlock Origin Lite
+        id:
+          chrome: ddkjiahejlhfcafbddmgiahcphecmpfh
+          edge: ddkjiahejlhfcafbddmgiahcphecmpfh
+          firefox: uBOLite@raymondhill.net
+        settings:
+          rulesets: ["+default", "+annoyances"]
+          strictBlockMode: true
+          defaultFiltering: optimal
+          disableFirstRunPage: true
+    firefox_extension_settings:
+      "*":
+        installation_mode: blocked
