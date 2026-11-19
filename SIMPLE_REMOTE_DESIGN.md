@@ -1028,7 +1028,7 @@ family-policy manager status --client "Kids-PC"
 #
 #   Firefox:
 #     Extensions: 1 installed
-#       - uBlock Origin Lite (uBOLite@raymondhill.net)
+#       - uBlock Origin Lite (uBOLiteRedux@raymondhill.net)
 #     Private Browsing: Disabled
 #
 #   Edge:

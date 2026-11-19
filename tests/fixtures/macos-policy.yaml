@@ -9,7 +9,7 @@ policies:
         id:
           chrome: ddkjiahejlhfcafbddmgiahcphecmpfh
           edge: ddkjiahejlhfcafbddmgiahcphecmpfh
-          firefox: uBOLite@raymondhill.net
+          firefox: uBOLiteRedux@raymondhill.net
         settings:
           rulesets: ["+default", "+annoyances"]
           strictBlockMode: true

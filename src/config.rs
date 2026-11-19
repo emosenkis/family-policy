@@ -569,6 +569,25 @@ policies:
     // Config Conversion Tests
 
     #[test]
+    fn shipped_ubo_lite_example_uses_current_firefox_addon_id() {
+        let config = Config::from_yaml_str(EXAMPLE_CONFIG).unwrap();
+        let (_, firefox, _) = to_browser_configs(&config);
+        let firefox = firefox.unwrap();
+        let extension = firefox
+            .extensions
+            .iter()
+            .find(|ext| ext.name == "uBlock Origin Lite")
+            .unwrap();
+        assert_eq!(extension.id, "uBOLiteRedux@raymondhill.net");
+        assert_eq!(
+            extension.install_url.as_deref(),
+            Some(
+                "https://addons.mozilla.org/firefox/downloads/latest/uBOLiteRedux@raymondhill.net/latest.xpi"
+            )
+        );
+    }
+
+    #[test]
     fn to_browser_configs_creates_correct_chrome_config() {
         let yaml = r#"
 policies:

@@ -92,7 +92,7 @@ policies:
     extensions:
       - name: uBlock Origin Lite
         id:
-          firefox: uBOLite@raymondhill.net
+          firefox: uBOLiteRedux@raymondhill.net
           chrome: ddkjiahejlhfcafbddmgiahcphecmpfh
           edge: ddkjiahejlhfcafbddmgiahcphecmpfh
         force_installed: true
@@ -157,7 +157,7 @@ State file format:
             "disable_guest_mode": true
         },
         "firefox": {
-            "extensions": ["uBOLite@raymondhill.net"],
+            "extensions": ["uBOLiteRedux@raymondhill.net"],
             "disable_private_browsing": true
         },
         "edge": {

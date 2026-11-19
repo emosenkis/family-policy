@@ -341,7 +341,7 @@ chrome:
 
 firefox:
   extensions:
-    - id: uBOLite@raymondhill.net
+    - id: uBOLiteRedux@raymondhill.net
       name: uBlock Origin Lite
       install_url: https://addons.mozilla.org/firefox/downloads/latest/ublock-origin-lite/latest.xpi
 
@@ -412,7 +412,7 @@ chrome:
 
 firefox:
   extensions:
-    - id: uBOLite@raymondhill.net
+    - id: uBOLiteRedux@raymondhill.net
       name: uBlock Origin Lite
       install_url: https://addons.mozilla.org/firefox/downloads/latest/ublock-origin-lite/latest.xpi
   disable_private_browsing: false
@@ -701,7 +701,7 @@ family-policy agent show-config
 #
 # firefox:
 #   extensions:
-#     - id: uBOLite@raymondhill.net
+#     - id: uBOLiteRedux@raymondhill.net
 #       name: uBlock Origin Lite
 #       install_url: https://addons.mozilla.org/...
 #   disable_private_browsing: true

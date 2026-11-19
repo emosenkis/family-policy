@@ -55,7 +55,7 @@ policies:
         # Use browser-specific IDs when extensions have different IDs
         id:
           chrome: ddkjiahejlhfcafbddmgiahcphecmpfh
-          firefox: uBOLite@raymondhill.net
+          firefox: uBOLiteRedux@raymondhill.net
           edge: ddkjiahejlhfcafbddmgiahcphecmpfh
         force_installed: true
 

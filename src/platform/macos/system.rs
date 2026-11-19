@@ -612,7 +612,7 @@ mod tests {
             firefox["ExtensionSettings"]
                 .as_dictionary()
                 .unwrap()
-                .contains_key("uBOLite@raymondhill.net")
+                .contains_key("uBOLiteRedux@raymondhill.net")
         );
         let state_before_dry_run = fs::read(&state_path).unwrap();
         crate::core::apply::apply_policies_from_config(&config, true).unwrap();
