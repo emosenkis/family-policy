@@ -79,9 +79,10 @@ mod tests {
         let scheduler = PollingScheduler::new(300, 60);
         let now = Utc::now();
         let next = scheduler.next_poll_time();
+        let after = Utc::now();
 
         assert!(next > now);
-        assert!(next <= now + chrono::Duration::seconds(360));
+        assert!(next <= after + chrono::Duration::seconds(360));
     }
 
     #[test]

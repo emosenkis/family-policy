@@ -11,6 +11,7 @@ pub use system::{apply_firefox_preferences, apply_mcx, remove_firefox_preference
 pub fn encode_mcx(domains: Vec<(String, HashMap<String, Value>)>) -> Dictionary {
     domains
         .into_iter()
+        .filter(|(_, settings)| !settings.is_empty())
         .map(|(domain, settings)| {
             let entries = settings
                 .into_iter()

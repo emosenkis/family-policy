@@ -600,7 +600,7 @@ pub fn status(verbose: bool) -> Result<()> {
                 format_duration(ago)
             );
 
-            println!("Current hash:  {}...", &state.config_hash[..16]);
+            println!("Current hash:  {:.16}...", state.config_hash);
 
             // Show applied policies
             println!();

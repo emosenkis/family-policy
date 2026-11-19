@@ -254,6 +254,15 @@ impl Backend {
                     .and_then(Value::as_dictionary)
                     .cloned()
                     .unwrap_or_default();
+                // defaults import merges; remove only owned keys omitted by this update.
+                if let Some(previous) = before.get(FIREFOX).and_then(Value::as_dictionary) {
+                    for key in previous.keys().filter(|key| !values.contains_key(*key)) {
+                        command(
+                            "/usr/bin/defaults",
+                            &["delete", "/Library/Preferences/org.mozilla.firefox", key],
+                        )?;
+                    }
+                }
                 let path = Path::new(RECEIPTS).join("firefox-import.plist");
                 write_dictionary(&path, &values)?;
                 command(
